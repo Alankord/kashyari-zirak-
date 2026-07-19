@@ -1,26 +1,74 @@
-name: Build EXE
+name: Build Kashyari Zirak Desktop App
 
-on: push
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'App Version (e.g., 1.0.0)'
+        required: false
+        default: '1.0.0'
 
 jobs:
-  build:
-    runs-on: windows-latest
-
+  build-windows:
+    runs-on: windows-2019
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '18'
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '16'
 
-      - name: Install dependencies
-        run: npm install
+    - name: Install dependencies
+      run: npm install
 
-      - name: Build Windows EXE
-        run: npm run build-win
+    - name: Install Electron 22 (Windows 7 compatible)
+      run: npm install electron@22.3.27 --save-dev
 
-      - name: Upload EXE
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-exe
-          path: dist/*.exe
+    - name: Build Portable App
+      run: npm run build-win-portable
+
+    - name: Build Installer
+      run: npm run build-win
+
+    - name: Upload Portable
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kashyari-Zirak-Portable-Windows
+        path: dist/*Portable*.exe
+
+    - name: Upload Installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kashyari-Zirak-Installer-Windows
+        path: dist/*Setup*.exe
+
+  build-windows-32bit:
+    runs-on: windows-2019
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js (32-bit)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '16'
+        architecture: 'x86'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Install Electron 22
+      run: npm install electron@22.3.27 --save-dev
+
+    - name: Build 32-bit Portable
+      run: npx electron-builder --win portable --ia32
+
+    - name: Upload 32-bit Portable
+      uses: actions/upload-artifact@v4
+      with:
+        name: Kashyari-Zirak-Portable-Windows7-32bit
+        path: dist/*Portable*.exe
