@@ -5,14 +5,22 @@ on: push
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
-      - name: Build
-        run: |
-          # ئەمە بەگوێرەی پڕۆژەکەت دەگۆڕی
-          g++ main.cpp -o program.exe
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows EXE
+        run: npm run build-win
+
       - name: Upload EXE
         uses: actions/upload-artifact@v4
         with:
-          name: program-exe
-          path: program.exe
+          name: installer-exe
+          path: dist/*.exe
