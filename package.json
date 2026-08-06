@@ -9,6 +9,9 @@
     "start": "electron .",
     "dist": "electron-builder --win --x64"
   },
+  "dependencies": {
+    "electron-updater": "^6.1.7"
+  },
   "devDependencies": {
     "electron": "22.3.27",
     "electron-builder": "^24.13.3"
@@ -16,21 +19,15 @@
   "build": {
     "appId": "com.smartpos.app",
     "productName": "SmartPOS",
-    "files": [
-      "index.html",
-      "main.js",
-      "preload.js"
-    ],
+    "files": ["index.html", "main.js", "preload.js"],
+    "publish": {
+      "provider": "github",
+      "owner": "Alankord",
+      "repo": "kashyari-zirak-"
+    },
     "win": {
       "target": [
-        {
-          "target": "portable",
-          "arch": ["x64"]
-        },
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
+        { "target": "nsis", "arch": ["x64"] }
       ]
     },
     "nsis": {
