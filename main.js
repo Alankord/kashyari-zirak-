@@ -14,8 +14,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true,
-      zoomFactor: 1.0
+      contextIsolation: true
     }
   });
 
@@ -32,15 +31,27 @@ app.whenReady().then(() => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify();
 
-  globalShortcut.register('CommandOrControl+=', () => {
+  const zoomIn = () => {
     const zoom = mainWindow.webContents.getZoomFactor();
     mainWindow.webContents.setZoomFactor(Math.min(zoom + 0.1, 3.0));
-  });
+  };
 
-  globalShortcut.register('CommandOrControl+-', () => {
+  const zoomOut = () => {
     const zoom = mainWindow.webContents.getZoomFactor();
     mainWindow.webContents.setZoomFactor(Math.max(zoom - 0.1, 0.5));
-  });
+  };
+
+  const zoomReset = () => {
+    mainWindow.webContents.setZoomFactor(1.0);
+  };
+
+  globalShortcut.register('CommandOrControl+=', zoomIn);
+  globalShortcut.register('CommandOrControl+Plus', zoomIn);
+  globalShortcut.register('CommandOrControl+numadd', zoomIn);
+  globalShortcut.register('CommandOrControl+-', zoomOut);
+  globalShortcut.register('CommandOrControl+numsub', zoomOut);
+  globalShortcut.register('CommandOrControl+0', zoomReset);
+  globalShortcut.register('CommandOrControl+num0', zoomReset);
 
   globalShortcut.register('F11', () => {
     mainWindow.setFullScreen(!mainWindow.isFullScreen());
@@ -51,6 +62,7 @@ app.whenReady().then(() => {
       mainWindow.setFullScreen(false);
     }
   });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
