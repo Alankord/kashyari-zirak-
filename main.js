@@ -1,9 +1,11 @@
-const { app, BrowserWindow, Menu, dialog } = require('electron');
+const { app, BrowserWindow, Menu, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 
+let mainWindow;
+
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1000,
@@ -12,22 +14,45 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      zoomFactor: 1.0
     }
   });
 
   Menu.setApplicationMenu(null);
-  win.setFullScreen(true);
-  win.loadFile('index.html');
+  mainWindow.setFullScreen(true);
+  mainWindow.loadFile('index.html');
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.setZoomFactor(1.0);
+  });
 }
 
 app.whenReady().then(() => {
   createWindow();
   autoUpdater.checkForUpdatesAndNotify();
 
+  globalShortcut.register('CommandOrControl+=', () => {
+    const zoom = mainWindow.webContents.getZoomFactor();
+    mainWindow.webContents.setZoomFactor(Math.min(zoom + 0.1, 3.0));
+  });
+
+  globalShortcut.register('CommandOrControl+-', () => {
+    const zoom = mainWindow.webContents.getZoomFactor();
+    mainWindow.webContents.setZoomFactor(Math.max(zoom - 0.1, 0.5));
+  });
+
+  globalShortcut.register('CommandOrControl+0', () => {
+    mainWindow.webContents.setZoomFactor(1.0);
+  });
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
 
 autoUpdater.on('update-downloaded', () => {
