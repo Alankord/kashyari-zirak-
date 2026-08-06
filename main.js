@@ -42,10 +42,15 @@ app.whenReady().then(() => {
     mainWindow.webContents.setZoomFactor(Math.max(zoom - 0.1, 0.5));
   });
 
-  globalShortcut.register('CommandOrControl+0', () => {
-    mainWindow.webContents.setZoomFactor(1.0);
+  globalShortcut.register('F11', () => {
+    mainWindow.setFullScreen(!mainWindow.isFullScreen());
   });
 
+  globalShortcut.register('Escape', () => {
+    if (mainWindow.isFullScreen()) {
+      mainWindow.setFullScreen(false);
+    }
+  });
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
