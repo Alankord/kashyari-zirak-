@@ -2866,14 +2866,14 @@
             showLoginOverlay();
         }
 
-        function changePin() {
-            const oldPin = prompt('کۆدی نهێنی ئێستا بنووسە:');
+        async function changePin() {
+            const oldPin = await prompt('کۆدی نهێنی ئێستا بنووسە:');
             if (oldPin === null) return;
             if (oldPin.trim() !== getSharedPin()) {
                 alert('❌ کۆدی نهێنی ئێستا هەڵەیە');
                 return;
             }
-            const newPin = prompt('کۆدی نهێنی نوێ بنووسە (لانیکەم 4 ژمارە):');
+            const newPin = await prompt('کۆدی نهێنی نوێ بنووسە (لانیکەم 4 ژمارە):');
             if (newPin === null) return;
             if (!newPin.trim() || newPin.trim().length < 4) {
                 alert('⚠️ کۆدی نهێنی دەبێ لانیکەم 4 پیت/ژمارە بێت');
@@ -3623,6 +3623,61 @@
                 toast.style.opacity = '0';
                 setTimeout(() => toast.remove(), 400);
             }, 2500);
+        }
+
+        // ==================== چارەسەری window.prompt() لە Electron (دۆخی fullscreen) ====================
+        // Electron لە دۆخی fullscreen-دا زۆرجار پشتگیری تەواوی window.prompt() ناکات (دیالۆگەکە
+        // دەرناکەوێت یان بێدەنگانە null دەگەڕێنێتەوە). ئەم فەنکشنە خۆی مۆداڵێکی HTML لەناو خودی
+        // پەیجەکەدا دروست دەکات و جێگەی prompt()ی سیستەم دەگرێتەوە — بەم شێوەیە بێگومان هەمیشە
+        // کاردەکات، جا لە کڕۆم بێت جا لە exe (Electron)ی fullscreen.
+        // تێبینی: بە قەستە بە ناوی "prompt" ناودەنرێت تاکو خۆکارانە جێگەی window.prompt()ی
+        // بنەڕەتی بگرێتەوە بۆ هەموو بانگکردنەکانی ناو ئەم فایلە، بەبێ گۆڕینی هەموو ناوی فەنکشنەکان.
+        function ensureCustomPromptModal() {
+            if (document.getElementById('customPromptOverlay')) return;
+            const overlay = document.createElement('div');
+            overlay.id = 'customPromptOverlay';
+            overlay.className = 'csv-modal-overlay';
+            overlay.innerHTML = `
+                <div class="csv-modal" style="max-width:420px;">
+                    <h3 id="customPromptTitle" style="white-space:pre-wrap;">پرسیار</h3>
+                    <input type="text" id="customPromptInput" class="form-control" style="margin-bottom:16px;">
+                    <div class="csv-modal-footer">
+                        <button class="csv-btn-cancel" id="customPromptCancelBtn">❌ پاشگەزبوونەوە</button>
+                        <button class="csv-btn-import" id="customPromptOkBtn">✅ باشە</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+        }
+
+        function prompt(message, defaultValue = '') {
+            ensureCustomPromptModal();
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('customPromptOverlay');
+                const titleEl = document.getElementById('customPromptTitle');
+                const input = document.getElementById('customPromptInput');
+                const okBtn = document.getElementById('customPromptOkBtn');
+                const cancelBtn = document.getElementById('customPromptCancelBtn');
+
+                titleEl.textContent = message;
+                input.value = (defaultValue !== null && defaultValue !== undefined) ? defaultValue : '';
+                overlay.classList.add('active');
+                setTimeout(() => { input.focus(); input.select(); }, 50);
+
+                function cleanup(result) {
+                    overlay.classList.remove('active');
+                    okBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                    input.onkeydown = null;
+                    resolve(result);
+                }
+
+                okBtn.onclick = () => cleanup(input.value);
+                cancelBtn.onclick = () => cleanup(null);
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value); }
+                    if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
+                };
+            });
         }
 
         let audioCtx = null;
@@ -4865,7 +4920,7 @@
 
             // پاراستنی زیادکردنی کۆگا: پێویستە کۆدی نهێنی (PIN) بنووسرێت پێش تۆمارکردنی هەر کڕینێک،
             // تاکو کاسیێر بەبێ ئاگاداری بەڕێوەبەر نەتوانێت کۆگا زیاد بکات.
-            const enteredPin = prompt('🔒 بۆ تۆمارکردنی کڕین کۆدی نهێنی (PIN) بنووسە:');
+            const enteredPin = await prompt('🔒 بۆ تۆمارکردنی کڕین کۆدی نهێنی (PIN) بنووسە:');
             if (enteredPin === null) return;
             if (enteredPin.trim() !== getSharedPin()) {
                 playSaleErrorSound();
@@ -5898,7 +5953,7 @@
             const product = products.find(p => String(p.id) === String(id));
             if (!product) return;
 
-            const newName = prompt('ناوی نوێ:', product.name);
+            const newName = await prompt('ناوی نوێ:', product.name);
             if (newName === null || !newName.trim()) return;
 
             product.name = newName.trim();
@@ -5975,29 +6030,29 @@
             const product = products.find(p => String(p.id) === String(id));
             if (!product) return;
 
-            const newName = prompt('ناوی نوێ:', product.name);
+            const newName = await prompt('ناوی نوێ:', product.name);
             if (newName === null) return;
             
-            const newPrice = prompt('نرخی فرۆشتن:', product.price);
+            const newPrice = await prompt('نرخی فرۆشتن:', product.price);
             if (newPrice === null) return;
             
-            const newCost = prompt('نرخی کڕین:', product.cost);
+            const newCost = await prompt('نرخی کڕین:', product.cost);
             if (newCost === null) return;
 
-            const newCompany = prompt('🏢 شریک / کۆمپانیا (ئەگەر نییە بەتاڵ بهێڵەرەوە):', product.company || '');
+            const newCompany = await prompt('🏢 شریک / کۆمپانیا (ئەگەر نییە بەتاڵ بهێڵەرەوە):', product.company || '');
 
-            const newAlert = prompt('ئاستی ئاگادارکردنەوە:', product.alert);
+            const newAlert = await prompt('ئاستی ئاگادارکردنەوە:', product.alert);
 
-            const newPkg = prompt('بڕی پاکێت (ئەگەر هەبێت، بنووسە. ئەگەر نییە 0 بنووسە):', product.packageSize || 0);
+            const newPkg = await prompt('بڕی پاکێت (ئەگەر هەبێت، بنووسە. ئەگەر نییە 0 بنووسە):', product.packageSize || 0);
             let newPkgPrice = null, newPkgCost = null;
             if (newPkg !== null && parseFloat(newPkg) >= 2) {
-                newPkgPrice = prompt('نرخی فرۆشتنی پاکێت (ئەگەر تایبەتی هەیە بنووسە، وەکوو نەبێت 0 بنووسە):', product.packagePrice || 0);
-                newPkgCost = prompt('نرخی کڕینی پاکێت (تێچوون، ئەگەر تایبەتی هەیە بنووسە، وەکوو نەبێت 0 بنووسە):', product.packageCost || 0);
+                newPkgPrice = await prompt('نرخی فرۆشتنی پاکێت (ئەگەر تایبەتی هەیە بنووسە، وەکوو نەبێت 0 بنووسە):', product.packagePrice || 0);
+                newPkgCost = await prompt('نرخی کڕینی پاکێت (تێچوون، ئەگەر تایبەتی هەیە بنووسە، وەکوو نەبێت 0 بنووسە):', product.packageCost || 0);
             }
 
-            const newExpiry = prompt('📅 بەرواری بەسەرچوون (فۆرمات: YYYY-MM-DD، ئەگەر نییە بەتاڵ بهێڵەرەوە):', product.expiryDate || '');
+            const newExpiry = await prompt('📅 بەرواری بەسەرچوون (فۆرمات: YYYY-MM-DD، ئەگەر نییە بەتاڵ بهێڵەرەوە):', product.expiryDate || '');
 
-            const newColor = prompt('🎨 ڕەنگی کاڵا (کۆدی hex وەکوو #22c55e، بۆ لابردنی ڕەنگ بەتاڵی بهێڵەوە):', product.color || '');
+            const newColor = await prompt('🎨 ڕەنگی کاڵا (کۆدی hex وەکوو #22c55e، بۆ لابردنی ڕەنگ بەتاڵی بهێڵەوە):', product.color || '');
 
             product.name = newName || product.name;
             product.price = parseFloat(newPrice) || product.price;
@@ -6076,10 +6131,10 @@
             const product = products.find(p => String(p.id) === String(id));
             if (!product) return;
 
-            const newPrice = prompt(`نرخی فرۆشتنی نوێ بۆ "${product.name}":`, product.price);
+            const newPrice = await prompt(`نرخی فرۆشتنی نوێ بۆ "${product.name}":`, product.price);
             if (newPrice === null) return;
 
-            const newCost = prompt(`نرخی کڕینی نوێ بۆ "${product.name}" (ئەگەر نەتگۆڕی، وەک خۆی دەمێنێتەوە):`, product.cost);
+            const newCost = await prompt(`نرخی کڕینی نوێ بۆ "${product.name}" (ئەگەر نەتگۆڕی، وەک خۆی دەمێنێتەوە):`, product.cost);
             if (newCost === null) return;
 
             const parsedPrice = parseFloat(newPrice);
@@ -6101,7 +6156,7 @@
             if (!Array.isArray(product.extraBarcodes)) product.extraBarcodes = [];
 
             const currentList = product.extraBarcodes.length ? product.extraBarcodes.join('، ') : 'هیچ نییە';
-            const input = prompt(
+            const input = await prompt(
                 `🏷️ کاڵا: ${product.name}\nبارکۆدی سەرەکی: ${product.barcode}\nبارکۆدی زیادە: ${currentList}\n\n` +
                 `بارکۆدێکی نوێ بنووسە تا وەک بارکۆدی زیادە بۆ هەمان کاڵا زیادبکرێت.\n` +
                 `(ئەگەر بارکۆدێک کە پێشتر لە سەرەوە لیستکراوە دووبارە بنووسیتەوە، لابردین دەکرێت)`,
@@ -6153,7 +6208,7 @@
             if (!product) return;
 
             const unitLabel = product.unit || 'دانە';
-            const qty = prompt(`چەند ${unitLabel} زیادبکرێت؟`, '10');
+            const qty = await prompt(`چەند ${unitLabel} زیادبکرێت؟`, '10');
             if (qty === null) return;
 
             const parsedQty = parseFloat(qty) || 0;
@@ -6177,7 +6232,7 @@
 
             const unitLabel = product.unit || 'دانە';
             const oldQty = product.quantity || 0;
-            const input = prompt(`بڕی ڕاستەقینەی "${product.name}" لە کۆگا چەندە؟\n(بڕی ئێستای سیستەم: ${oldQty} ${unitLabel})`, oldQty);
+            const input = await prompt(`بڕی ڕاستەقینەی "${product.name}" لە کۆگا چەندە؟\n(بڕی ئێستای سیستەم: ${oldQty} ${unitLabel})`, oldQty);
             if (input === null) return;
 
             const newQty = parseFloat(input);
@@ -6283,13 +6338,13 @@
             const card = cards.find(c => c.id === id);
             if (!card) return;
 
-            const newName = prompt('ناوی کارت:', card.name);
+            const newName = await prompt('ناوی کارت:', card.name);
             if (newName === null) return;
 
-            const newCost = prompt('نرخی کڕین (ڕەسید):', card.costPrice);
+            const newCost = await prompt('نرخی کڕین (ڕەسید):', card.costPrice);
             if (newCost === null) return;
 
-            const newSell = prompt('نرخی فرۆشتن:', card.sellPrice);
+            const newSell = await prompt('نرخی فرۆشتن:', card.sellPrice);
             if (newSell === null) return;
 
             card.name = newName.trim() || card.name;
@@ -6325,7 +6380,7 @@
             // پیشاندانی بڕی ئێستا بۆ هەموو جۆرەکان
             const cardList = cards.map(c => `  • ${c.name}: ${c.stock || 0} کارت`).join('\n');
 
-            const qty = prompt(
+            const qty = await prompt(
                 `📦 زیادکردنی ڕەسید بۆ هەموو جۆرەکانی کارت\n` +
                 `📅 بەروار: ${dateStr}\n\n` +
                 `بڕی ئێستا:\n${cardList}\n\n` +
@@ -6921,13 +6976,13 @@
             const customer = customers.find(c => c.id === id);
             if (!customer) return;
 
-            const newName = prompt('ناوی نوێ:', customer.name);
+            const newName = await prompt('ناوی نوێ:', customer.name);
             if (newName === null) return;
             
-            const newPhone = prompt('تەلەفۆن:', customer.phone);
+            const newPhone = await prompt('تەلەفۆن:', customer.phone);
             if (newPhone === null) return;
             
-            const newEmail = prompt('ئیمەیڵ:', customer.email);
+            const newEmail = await prompt('ئیمەیڵ:', customer.email);
 
             customer.name = newName || customer.name;
             customer.phone = newPhone || customer.phone;
@@ -6952,7 +7007,7 @@
                 return;
             }
 
-            const amount = prompt(`قەرزی ئێستا: ${customer.balance.toLocaleString()} د.ع\nچەند پارە وەردەگریت؟`, customer.balance);
+            const amount = await prompt(`قەرزی ئێستا: ${customer.balance.toLocaleString()} د.ع\nچەند پارە وەردەگریت؟`, customer.balance);
             if (amount === null) return;
 
             const payment = parseFloat(amount);
@@ -6987,7 +7042,7 @@
             const customer = customers.find(c => c.id === id);
             if (!customer) return;
 
-            const amount = prompt(`باڵانسی ئێستا: ${(customer.balance || 0).toLocaleString()} د.ع\nچەند پارە دەبەیتەوە (پارەدانێکی هەڵە ڕاست بکەیتەوە)؟`, '');
+            const amount = await prompt(`باڵانسی ئێستا: ${(customer.balance || 0).toLocaleString()} د.ع\nچەند پارە دەبەیتەوە (پارەدانێکی هەڵە ڕاست بکەیتەوە)؟`, '');
             if (amount === null) return;
 
             const withdrawAmount = parseFloat(amount);
@@ -7021,7 +7076,7 @@
             const customer = customers.find(c => c.id === id);
             if (!customer) return;
 
-            const amount = prompt(`باڵانسی ئێستا: ${(customer.balance || 0).toLocaleString()} د.ع\nچەند قەرزی پێشوو زیاد بکەیت؟`, '');
+            const amount = await prompt(`باڵانسی ئێستا: ${(customer.balance || 0).toLocaleString()} د.ع\nچەند قەرزی پێشوو زیاد بکەیت؟`, '');
             if (amount === null) return;
 
             const debtAmount = parseFloat(amount);
@@ -7048,7 +7103,7 @@
                 return;
             }
 
-            const amount = prompt(`باڵانسی ئێستا: ${(customer.balance || 0).toLocaleString()} د.ع\nچەند لە قەرزی پێشوو کەم بکەیتەوە؟`, '');
+            const amount = await prompt(`باڵانسی ئێستا: ${(customer.balance || 0).toLocaleString()} د.ع\nچەند لە قەرزی پێشوو کەم بکەیتەوە؟`, '');
             if (amount === null) return;
 
             const debtAmount = parseFloat(amount);
@@ -7102,7 +7157,7 @@
             catch (e) { return []; }
         }
 
-        function resetReportCheckpoint() {
+        async function resetReportCheckpoint() {
             if (!confirm('دڵنیایت دەتەوێت ژمێریاری ڕاپۆرت بسڕیتەوە و لە ئێستاوە دەستپێبکەیتەوە؟ (بۆ نموونە لە کۆتایی گۆشەیەکی کارمەندێک)')) return;
             const oldCp = getReportCheckpoint(); // دەکرێت null بێت (یەکەم جار)
             const now = new Date().toISOString();
@@ -7110,7 +7165,7 @@
             // بژاردەی گواستنەوەی دەستی: بەکارهێنەر دەتوانێت بڕێک لەم شیفتە دەربهێنێت و بیباتە
             // بۆ شیفتی داهاتوو (بۆ نموونە: ١٠١ هەیە، دەتوانیت ١ی بگوازیتەوە بۆ داهاتوو، ئەمە
             // ١٠٠ لەم شیفتەدا دەمێنێتەوە و ١ لە شیفتی داهاتوودا زیاد دەبێت).
-            const carryOverInput = prompt('ئەگەر دەتەوێت بڕێک لەم شیفتە بگوازیتەوە بۆ شیفتی داهاتوو، بڕەکە بنووسە (بۆ نموونە: 1). ئەگەر نەتەوێت، بەتاڵی بهێڵەوە یان 0 بنووسە:', '0');
+            const carryOverInput = await prompt('ئەگەر دەتەوێت بڕێک لەم شیفتە بگوازیتەوە بۆ شیفتی داهاتوو، بڕەکە بنووسە (بۆ نموونە: 1). ئەگەر نەتەوێت، بەتاڵی بهێڵەوە یان 0 بنووسە:', '0');
             const carryOver = parseFloat(carryOverInput) || 0;
 
             // پێش سڕینەوە، ماوەکەی پێشوو (from oldCp to now) تۆمار بکە بۆ مێژوو
@@ -7369,7 +7424,7 @@
                 const realId = item._realProductId || item.productId;
                 const product = products.find(p => String(p.id) === String(realId));
                 const label = item.name || (product ? product.name : 'کاڵا');
-                const answer = prompt(
+                const answer = await prompt(
                     `✏️ "${label}"\nنرخی کڕین بۆ دانەیەک: ${(item.cost || 0).toLocaleString()} د.ع\nبڕی ئێستا: ${item.quantity}\n\nبڕی نوێ بنووسە (بۆ لابردنی ئەم کاڵایە لە کڕینەکە، 0 بنووسە):`,
                     item.quantity
                 );
