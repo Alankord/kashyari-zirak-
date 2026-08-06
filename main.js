@@ -19,11 +19,17 @@ function createWindow() {
   });
 
   Menu.setApplicationMenu(null);
-  mainWindow.setFullScreen(true);
   mainWindow.loadFile('index.html');
 
   mainWindow.webContents.on('did-finish-load', () => {
     mainWindow.webContents.setZoomFactor(1.0);
+    mainWindow.setFullScreen(true);
+  });
+
+  mainWindow.on('enter-full-screen', () => {
+    setTimeout(() => {
+      mainWindow.webContents.executeJavaScript('window.dispatchEvent(new Event("resize"));');
+    }, 100);
   });
 }
 
