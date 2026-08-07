@@ -2853,8 +2853,8 @@
             return false;
         }
 
-        function handleLogout() {
-            if (!confirm('دڵنیایت دەتەوێت بچیتە دەرەوە؟')) return;
+        async function handleLogout() {
+            if (!await confirm('دڵنیایت دەتەوێت بچیتە دەرەوە؟')) return;
             localStorage.removeItem(CURRENT_USER_KEY);
             setCurrentUserBadge('-');
             const nameInput = document.getElementById('loginName');
@@ -2870,17 +2870,17 @@
             const oldPin = await prompt('کۆدی نهێنی ئێستا بنووسە:');
             if (oldPin === null) return;
             if (oldPin.trim() !== getSharedPin()) {
-                alert('❌ کۆدی نهێنی ئێستا هەڵەیە');
+                await alert('❌ کۆدی نهێنی ئێستا هەڵەیە');
                 return;
             }
             const newPin = await prompt('کۆدی نهێنی نوێ بنووسە (لانیکەم 4 ژمارە):');
             if (newPin === null) return;
             if (!newPin.trim() || newPin.trim().length < 4) {
-                alert('⚠️ کۆدی نهێنی دەبێ لانیکەم 4 پیت/ژمارە بێت');
+                await alert('⚠️ کۆدی نهێنی دەبێ لانیکەم 4 پیت/ژمارە بێت');
                 return;
             }
             safeSetLocalStorage(LOGIN_PIN_KEY, newPin.trim());
-            alert('✅ کۆدی نهێنی نوێ پاشەکەوتکرا');
+            await alert('✅ کۆدی نهێنی نوێ پاشەکەوتکرا');
         }
 
         function initLoginScreen() {
@@ -3293,7 +3293,7 @@
                 return;
             }
 
-            const ok = confirm(
+            const ok = await confirm(
                 `⚠️ ${total.toLocaleString()} تۆماری فرۆشتن/کڕینی ئەرشیفکراو (کۆن) بۆ هەمیشە دەسڕدرێتەوە.\n\n` +
                 `❌ ئەمە ناتوانرێت پاشگەز بکرێتەوە — پسوڵە/گەڕاندنەوەی ئەم تۆمارانە دیسان بەردەست نابن.\n` +
                 `✅ کۆگا/کاڵاکان، کڕیارەکان، و قەرزەکان هەرگیز ناسڕدرێنەوە — تەنیا مێژووی فرۆشتن/کڕینی کۆن.\n` +
@@ -3524,7 +3524,7 @@
                 return;
             }
 
-            const ok = confirm(
+            const ok = await confirm(
                 `⚠️ ${totalCount.toLocaleString()} تۆمار (فرۆشتن+کارت) کۆنتر لە ${KEEP_DAYS} ڕۆژ دەردەهێنرێت وەک فایلی CSV و دواتر لە بیرگەی ئامێرەکە دەسڕدرێتەوە بۆ ئازادکردنی شوێن.\n\n` +
                 `⚠️ دڵنیابەوە فایلی دابەزێنراو لە شوێنێکی سەلامەت (USB/کارتی مێمۆری) هەڵدەگریت — دوای سڕینەوە تەنیا لەو فایلەدا دەمێنێتەوە.\n\n` +
                 `بەردەوامیت؟`
@@ -3677,6 +3677,98 @@
                     if (e.key === 'Enter') { e.preventDefault(); cleanup(input.value); }
                     if (e.key === 'Escape') { e.preventDefault(); cleanup(null); }
                 };
+            });
+        }
+
+        // ==================== چارەسەری window.await alert() و window.await confirm() لە Electron ====================
+        // هەمان کێشەی prompt(): دیالۆگی ڕەسەنی سیستەم (native) فۆکەسی وینڈۆکە تێکدەدات، بۆیە
+        // دواتر هیچ input‌ێکی ناو مۆداڵی خۆماڵیمان (وەک prompt()ی خۆمان) فۆکەسی وەرناگرێت.
+        // چارەسەر: await alert() و await confirm()یش وەک prompt() دەگۆڕدرێن بۆ مۆداڵی HTML خۆماڵی —
+        // بەم شێوەیە هەرگیز فۆکەسی سیستەم تێکناچێت، جا لە کڕۆم بێت جا لە Electron fullscreen.
+        function ensureCustomAlertModal() {
+            if (document.getElementById('customAlertOverlay')) return;
+            const overlay = document.createElement('div');
+            overlay.id = 'customAlertOverlay';
+            overlay.className = 'csv-modal-overlay';
+            overlay.innerHTML = `
+                <div class="csv-modal" style="max-width:420px;">
+                    <p id="customAlertMessage" style="white-space:pre-wrap; font-size:15px; line-height:1.6; margin-bottom:18px;"></p>
+                    <div class="csv-modal-footer">
+                        <button class="csv-btn-import" id="customAlertOkBtn">✅ باشە</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+        }
+
+        function alert(message) {
+            ensureCustomAlertModal();
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('customAlertOverlay');
+                const msgEl = document.getElementById('customAlertMessage');
+                const okBtn = document.getElementById('customAlertOkBtn');
+
+                msgEl.textContent = message;
+                overlay.classList.add('active');
+                setTimeout(() => { okBtn.focus(); }, 50);
+
+                function cleanup() {
+                    overlay.classList.remove('active');
+                    okBtn.onclick = null;
+                    document.removeEventListener('keydown', onKey, true);
+                    resolve(undefined);
+                }
+                function onKey(e) {
+                    if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); cleanup(); }
+                }
+
+                okBtn.onclick = () => cleanup();
+                document.addEventListener('keydown', onKey, true);
+            });
+        }
+
+        function ensureCustomConfirmModal() {
+            if (document.getElementById('customConfirmOverlay')) return;
+            const overlay = document.createElement('div');
+            overlay.id = 'customConfirmOverlay';
+            overlay.className = 'csv-modal-overlay';
+            overlay.innerHTML = `
+                <div class="csv-modal" style="max-width:440px;">
+                    <p id="customConfirmMessage" style="white-space:pre-wrap; font-size:15px; line-height:1.6; margin-bottom:18px;"></p>
+                    <div class="csv-modal-footer">
+                        <button class="csv-btn-cancel" id="customConfirmCancelBtn">❌ نەخێر</button>
+                        <button class="csv-btn-import" id="customConfirmOkBtn">✅ بەڵێ</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+        }
+
+        function confirm(message) {
+            ensureCustomConfirmModal();
+            return new Promise((resolve) => {
+                const overlay = document.getElementById('customConfirmOverlay');
+                const msgEl = document.getElementById('customConfirmMessage');
+                const okBtn = document.getElementById('customConfirmOkBtn');
+                const cancelBtn = document.getElementById('customConfirmCancelBtn');
+
+                msgEl.textContent = message;
+                overlay.classList.add('active');
+                setTimeout(() => { okBtn.focus(); }, 50);
+
+                function cleanup(result) {
+                    overlay.classList.remove('active');
+                    okBtn.onclick = null;
+                    cancelBtn.onclick = null;
+                    document.removeEventListener('keydown', onKey, true);
+                    resolve(result);
+                }
+                function onKey(e) {
+                    if (e.key === 'Enter') { e.preventDefault(); cleanup(true); }
+                    if (e.key === 'Escape') { e.preventDefault(); cleanup(false); }
+                }
+
+                okBtn.onclick = () => cleanup(true);
+                cancelBtn.onclick = () => cleanup(false);
+                document.addEventListener('keydown', onKey, true);
             });
         }
 
@@ -3984,7 +4076,7 @@
 
         // پاککردنەوەی دووبارەکان لە localStorage
         async function cleanupDuplicates() {
-            if (!confirm('⚠️ ئایا دڵنیایت؟ ئەم کردارە دووبارەکان لە ئەرشیفی ناوخۆیی دەسڕێتەوە.')) return;
+            if (!await confirm('⚠️ ئایا دڵنیایت؟ ئەم کردارە دووبارەکان لە ئەرشیفی ناوخۆیی دەسڕێتەوە.')) return;
 
             // Sales: دووبارەکان بسڕەوە بەپێی invoiceNo
             let sales = getSalesCache();
@@ -4144,9 +4236,9 @@
             switchCart(activeCartIndex);
         }
 
-        function closeCart(index) {
+        async function closeCart(index) {
             if (carts[index].cart.length > 0) {
-                if (!confirm(`${carts[index].label} ${carts[index].cart.length} کاڵای تێدایە. دڵنیایت دەتەوێت داخبکەیت؟`)) return;
+                if (!await confirm(`${carts[index].label} ${carts[index].cart.length} کاڵای تێدایە. دڵنیایت دەتەوێت داخبکەیت؟`)) return;
             }
             carts.splice(index, 1);
             // Relabel
@@ -4669,8 +4761,8 @@
             }
         }
 
-        function clearCart() {
-            if (cart.length > 0 && !confirm('دڵنیای دەتەوێت سەبەتەکە پاکبکەیتەوە؟')) return;
+        async function clearCart() {
+            if (cart.length > 0 && !await confirm('دڵنیای دەتەوێت سەبەتەکە پاکبکەیتەوە؟')) return;
             cart = [];
             const discountInput = document.getElementById('discountInput');
             if (discountInput) discountInput.value = '0';
@@ -4723,7 +4815,7 @@
             if (_saleProcessing) return;
             if (cart.length === 0) {
                 playSaleErrorSound();
-                alert('تکایە یەک کاڵا بەلانی کەمەوە زیادبکە!');
+                await alert('تکایە یەک کاڵا بەلانی کەمەوە زیادبکە!');
                 return;
             }
             // فرۆشتنی قەرز پێویستە بە کڕیارێکی دیاریکراو ببەسترێتەوە — "کڕیاری ئاسایی" نابێت بە قەرز بفرۆشرێت،
@@ -4732,7 +4824,7 @@
             const customerIdCheck = document.getElementById('customerSelect')?.value || '';
             if (paymentMethodCheck === 'credit' && !customerIdCheck) {
                 playSaleErrorSound();
-                alert('⚠️ بۆ فرۆشتنی قەرز پێویستە کڕیارێکی دیاریکراو هەڵبژێریت، نابێت "کڕیاری ئاسایی" بێت!');
+                await alert('⚠️ بۆ فرۆشتنی قەرز پێویستە کڕیارێکی دیاریکراو هەڵبژێریت، نابێت "کڕیاری ئاسایی" بێت!');
                 return;
             }
             const invoiceNo = currentInvoiceNo || generateInvoiceNo();
@@ -4894,8 +4986,8 @@
             }
         }
 
-        function holdSale() {
-            alert('⏸️ فرۆشتنەکە ڕاگیرا. دەتوانیت دواتر بەردەوامی پێبدەیت.');
+        async function holdSale() {
+            await alert('⏸️ فرۆشتنەکە ڕاگیرا. دەتوانیت دواتر بەردەوامی پێبدەیت.');
         }
 
         // ==================== کڕین (تۆمارکردنی سەبەتە وەک کڕینی کۆگا، نەک فرۆشتن) ====================
@@ -4906,7 +4998,7 @@
             if (_purchaseProcessing) return;
             if (cart.length === 0) {
                 playSaleErrorSound();
-                alert('تکایە یەک کاڵا بەلانی کەمەوە زیادبکە!');
+                await alert('تکایە یەک کاڵا بەلانی کەمەوە زیادبکە!');
                 return;
             }
 
@@ -4924,7 +5016,7 @@
             if (enteredPin === null) return;
             if (enteredPin.trim() !== getSharedPin()) {
                 playSaleErrorSound();
-                alert('❌ کۆدی نهێنی هەڵەیە. کڕینەکە تۆمار نەکرا.');
+                await alert('❌ کۆدی نهێنی هەڵەیە. کڕینەکە تۆمار نەکرا.');
                 return;
             }
 
@@ -6195,7 +6287,7 @@
         }
 
         async function deleteProduct(id) {
-            if (!confirm('دڵنیای دەتەوێت ئەم کاڵایە بسڕیتەوە؟')) return;
+            if (!await confirm('دڵنیای دەتەوێت ئەم کاڵایە بسڕیتەوە؟')) return;
             
             deleteProductFromDB(id);
             await loadProducts();
@@ -6217,7 +6309,7 @@
             saveProduct(product);
             await loadProducts();
             await displayProducts();
-            alert(`✅ بڕی ${parsedQty} ${unitLabel} زیادکرا! (کۆی نوێ: ${product.quantity} ${unitLabel})`);
+            await alert(`✅ بڕی ${parsedQty} ${unitLabel} زیادکرا! (کۆی نوێ: ${product.quantity} ${unitLabel})`);
         }
 
         // ڕاستکردنەوەی بڕی کۆگا بە ژمارەی ڕاستەقینە (نەک زیادکردن، بەڵکو دانانی ژمارەی ڕاستیی کۆگا)
@@ -6247,7 +6339,7 @@
                 return;
             }
 
-            if (!confirm(`دڵنیای؟\n"${product.name}"\nلە: ${oldQty} ${unitLabel}\nبۆ: ${newQty} ${unitLabel}\nجیاوازی: ${diff > 0 ? '+' : ''}${diff} ${unitLabel}`)) return;
+            if (!await confirm(`دڵنیای؟\n"${product.name}"\nلە: ${oldQty} ${unitLabel}\nبۆ: ${newQty} ${unitLabel}\nجیاوازی: ${diff > 0 ? '+' : ''}${diff} ${unitLabel}`)) return;
 
             product.quantity = Math.round(newQty * 1000) / 1000;
             product.lastChangeType = 'correction';
@@ -6357,7 +6449,7 @@
         }
 
         async function deleteCard(id) {
-            if (!confirm('دڵنیای دەتەوێت ئەم جۆرە کارتە بسڕیتەوە؟ (مێژووی فرۆشتنی پێشووی ناسڕێتەوە)')) return;
+            if (!await confirm('دڵنیای دەتەوێت ئەم جۆرە کارتە بسڕیتەوە؟ (مێژووی فرۆشتنی پێشووی ناسڕێتەوە)')) return;
             deleteCardFromDB(id);
             await loadCards();
             showToast('🗑️ کارت سڕدرایەوە');
@@ -6557,7 +6649,7 @@
         }
 
         async function deleteCardSale(id) {
-            if (!confirm('دڵنیای دەتەوێت ئەم تۆمارە بسڕیتەوە؟')) return;
+            if (!await confirm('دڵنیای دەتەوێت ئەم تۆمارە بسڕیتەوە؟')) return;
             deleteCardSaleFromDB(id);
             await loadCardReports();
             showToast('🗑️ تۆماری فرۆشتنی کارت سڕدرایەوە');
@@ -6949,7 +7041,7 @@
             const address = document.getElementById('customerAddress')?.value.trim();
 
             if (!name) {
-                alert('تکایە ناوی کڕیار بنووسە!');
+                await alert('تکایە ناوی کڕیار بنووسە!');
                 return;
             }
 
@@ -6968,7 +7060,7 @@
             if (form) form.style.display = 'none';
             
             await loadCustomers();
-            alert('✅ کڕیار بەسەرکەوتوویی زیادکرا!');
+            await alert('✅ کڕیار بەسەرکەوتوویی زیادکرا!');
         }
 
         async function editCustomer(id) {
@@ -6993,7 +7085,7 @@
         }
 
         async function deleteCustomer(id) {
-            if (!confirm('دڵنیای دەتەوێت ئەم کڕیارە بسڕیتەوە؟')) return;
+            if (!await confirm('دڵنیای دەتەوێت ئەم کڕیارە بسڕیتەوە؟')) return;
             
             deleteCustomerFromDB(id);
             await loadCustomers();
@@ -7003,7 +7095,7 @@
             const customers = getCustomersCache();
             const customer = customers.find(c => c.id === id);
             if (!customer || customer.balance <= 0) {
-                alert('ئەم کڕیارە قەرزی نییە!');
+                await alert('ئەم کڕیارە قەرزی نییە!');
                 return;
             }
 
@@ -7012,7 +7104,7 @@
 
             const payment = parseFloat(amount);
             if (payment > customer.balance) {
-                alert('ناتوانیت زیاتر لە قەرزەکە وەربگریت!');
+                await alert('ناتوانیت زیاتر لە قەرزەکە وەربگریت!');
                 return;
             }
 
@@ -7032,7 +7124,7 @@
             updateCartShiftCounter();
 
             await loadCustomers();
-            alert('✅ پارەدان بەسەرکەوتوویی تۆمارکرا!');
+            await alert('✅ پارەدان بەسەرکەوتوویی تۆمارکرا!');
         }
 
         // گەڕاندنەوەی پارەدانێکی هەڵە (پارەبردنەوە) — پارەکە دەگەڕێتەوە سەر قەرزی کڕیار،
@@ -7047,7 +7139,7 @@
 
             const withdrawAmount = parseFloat(amount);
             if (!withdrawAmount || withdrawAmount <= 0) {
-                alert('تکایە بڕێکی دروست بنووسە!');
+                await alert('تکایە بڕێکی دروست بنووسە!');
                 return;
             }
 
@@ -7066,7 +7158,7 @@
             updateCartShiftCounter();
 
             await loadCustomers();
-            alert('✅ پارەکە گەڕایەوە سەر قەرز و لە کۆی فرۆشتن کەمکرایەوە!');
+            await alert('✅ پارەکە گەڕایەوە سەر قەرز و لە کۆی فرۆشتن کەمکرایەوە!');
         }
 
         // زیادکردنی قەرزێکی پێشوو (بۆ نموونە قەرزێک کە بەری بەکارهێنانی ئەم سیستەمە هەبووە)
@@ -7081,14 +7173,14 @@
 
             const debtAmount = parseFloat(amount);
             if (!debtAmount || debtAmount <= 0) {
-                alert('تکایە بڕێکی دروست بنووسە!');
+                await alert('تکایە بڕێکی دروست بنووسە!');
                 return;
             }
 
             customer.balance = (customer.balance || 0) + debtAmount;
             saveCustomer(customer);
             await loadCustomers();
-            alert('✅ قەرزی پێشوو زیادکرا بۆ باڵانسی کڕیار!');
+            await alert('✅ قەرزی پێشوو زیادکرا بۆ باڵانسی کڕیار!');
         }
 
         // کەمکردنەوەی قەرزی پێشوو (ڕاستکردنەوەی هەڵە لە بڕی قەرزی پێشووی زیادکراو)
@@ -7099,7 +7191,7 @@
             if (!customer) return;
 
             if (!customer.balance || customer.balance <= 0) {
-                alert('ئەم کڕیارە قەرزی نییە!');
+                await alert('ئەم کڕیارە قەرزی نییە!');
                 return;
             }
 
@@ -7108,18 +7200,18 @@
 
             const debtAmount = parseFloat(amount);
             if (!debtAmount || debtAmount <= 0) {
-                alert('تکایە بڕێکی دروست بنووسە!');
+                await alert('تکایە بڕێکی دروست بنووسە!');
                 return;
             }
             if (debtAmount > customer.balance) {
-                alert('ناتوانیت زیاتر لە باڵانسی ئێستا کەمی بکەیتەوە!');
+                await alert('ناتوانیت زیاتر لە باڵانسی ئێستا کەمی بکەیتەوە!');
                 return;
             }
 
             customer.balance = customer.balance - debtAmount;
             saveCustomer(customer);
             await loadCustomers();
-            alert('✅ قەرزی پێشوو کەمکرایەوە لە باڵانسی کڕیار!');
+            await alert('✅ قەرزی پێشوو کەمکرایەوە لە باڵانسی کڕیار!');
         }
 
         // ==================== بەشی ڕاپۆرت ====================
@@ -7158,7 +7250,7 @@
         }
 
         async function resetReportCheckpoint() {
-            if (!confirm('دڵنیایت دەتەوێت ژمێریاری ڕاپۆرت بسڕیتەوە و لە ئێستاوە دەستپێبکەیتەوە؟ (بۆ نموونە لە کۆتایی گۆشەیەکی کارمەندێک)')) return;
+            if (!await confirm('دڵنیایت دەتەوێت ژمێریاری ڕاپۆرت بسڕیتەوە و لە ئێستاوە دەستپێبکەیتەوە؟ (بۆ نموونە لە کۆتایی گۆشەیەکی کارمەندێک)')) return;
             const oldCp = getReportCheckpoint(); // دەکرێت null بێت (یەکەم جار)
             const now = new Date().toISOString();
 
@@ -7388,7 +7480,7 @@
         }
 
         // بینینی وردەکارییەکانی کڕینێک (ناوی هەموو کاڵاکان و بڕیان) وەک لیستێکی خوێندنەوەی ئاسان
-        function viewPurchase(invoiceNo) {
+        async function viewPurchase(invoiceNo) {
             const purchases = getPurchasesCache();
             const purchase = purchases.find(p => p.invoiceNo === invoiceNo);
             if (!purchase) return;
@@ -7401,7 +7493,7 @@
                 `👤 کارمەند: ${purchase.cashierName || '-'}\n\n` +
                 lines.join('\n') +
                 `\n\n💸 کۆی تێچوون: ${(purchase.totalCost || 0).toLocaleString()} د.ع`;
-            alert(details);
+            await alert(details);
         }
 
         // دەستکاریکردنی کڕینێکی تۆمارکراو: بۆ ڕاستکردنەوەی بڕی هەڵە یان لابردنی کاڵایەکی هەڵە
@@ -7440,7 +7532,7 @@
                 newQuantities.push(parsed);
             }
 
-            if (!confirm(`دڵنیای لە پاشەکەوتکردنی گۆڕانکارییەکان بۆ کڕینی (${invoiceNo})؟\nبڕی کۆگا بەپێی جیاوازی نوێ و کۆن ڕاست دەکرێتەوە.`)) return;
+            if (!await confirm(`دڵنیای لە پاشەکەوتکردنی گۆڕانکارییەکان بۆ کڕینی (${invoiceNo})؟\nبڕی کۆگا بەپێی جیاوازی نوێ و کۆن ڕاست دەکرێتەوە.`)) return;
 
             const changedProducts = [];
             const finalItems = [];
@@ -7484,7 +7576,7 @@
             const purchases = getPurchasesCache();
             const purchase = purchases.find(p => p.invoiceNo === invoiceNo);
             if (!purchase) return;
-            if (!confirm(`دڵنیای دەتەوێت ئەم کڕینە بسڕیتەوە؟ (${invoiceNo})\nبڕی کۆگای ئەو کاڵایانە کەم دەکرێتەوە بۆ گەڕاندنەوەی دۆخی پێشوو.`)) return;
+            if (!await confirm(`دڵنیای دەتەوێت ئەم کڕینە بسڕیتەوە؟ (${invoiceNo})\nبڕی کۆگای ئەو کاڵایانە کەم دەکرێتەوە بۆ گەڕاندنەوەی دۆخی پێشوو.`)) return;
 
             const products = getProductsCache();
             const changedProducts = [];
@@ -7836,7 +7928,7 @@
             if (sale) {
                 printReceipt(sale);
             } else {
-                alert('پسوڵە نەدۆزرایەوە!');
+                await alert('پسوڵە نەدۆزرایەوە!');
             }
         }
 
@@ -8300,7 +8392,7 @@
                 const file = e.target.files[0];
                 if (!file) return;
 
-                if (!confirm('⚠️ ئاگاداری: گەڕاندنەوەی داتا هەموو داتای ئێستای پرۆگرامەکە دەسڕێتەوە و بە داتای ناو فایلی پشتیوێنکراو دەگۆڕدرێت. ئایا دڵنیایت دەتەوێت بەردەوام بیت؟')) {
+                if (!await confirm('⚠️ ئاگاداری: گەڕاندنەوەی داتا هەموو داتای ئێستای پرۆگرامەکە دەسڕێتەوە و بە داتای ناو فایلی پشتیوێنکراو دەگۆڕدرێت. ئایا دڵنیایت دەتەوێت بەردەوام بیت؟')) {
                     return;
                 }
 
@@ -8796,7 +8888,7 @@
                 if (!name) continue;
                 const existIdx = barcode ? products.findIndex(p => p.barcode === barcode) : -1;
                 if (existIdx !== -1) {
-                    const choice = confirm(`⚠️ کاڵای "${name}"\nبارکۆد: ${barcode}\n\nپێشتر هەیە — نوێبکەیتەوە؟\n\nبەلێ = نوێبکەرەوە\nنەخێر = بەجێبهێڵیت`);
+                    const choice = await confirm(`⚠️ کاڵای "${name}"\nبارکۆد: ${barcode}\n\nپێشتر هەیە — نوێبکەیتەوە؟\n\nبەلێ = نوێبکەرەوە\nنەخێر = بەجێبهێڵیت`);
                     if (choice) {
                         const old = products[existIdx];
                         products[existIdx] = { ...old, name,
@@ -8834,7 +8926,7 @@
                 if (!cardName) continue;
                 const exists = cardSales.find(s => s.cardName===cardName && s.createdAt===createdAt);
                 if (exists) {
-                    const choice = confirm(`⚠️ تۆماری کارت "${cardName}"\nبەروار: ${createdAt}\n\nپێشتر هەیە — نوێبکەیتەوە؟\n\nبەلێ = نوێبکەرەوە\nنەخێر = بەجێبهێڵیت`);
+                    const choice = await confirm(`⚠️ تۆماری کارت "${cardName}"\nبەروار: ${createdAt}\n\nپێشتر هەیە — نوێبکەیتەوە؟\n\nبەلێ = نوێبکەرەوە\nنەخێر = بەجێبهێڵیت`);
                     if (choice) { Object.assign(exists, {quantity,totalCost,totalSell,profit}); added++; }
                     else { skipped++; }
                 } else {
@@ -8864,7 +8956,7 @@
                 if (!invoiceNo) continue;
                 const existIdx = sales.findIndex(s => s.invoiceNo===invoiceNo);
                 if (existIdx !== -1) {
-                    const choice = confirm(`⚠️ پسوولەی ژمارە "${invoiceNo}" پێشتر هەیە — نوێبکەیتەوە؟\n\nبەلێ = نوێبکەرەوە\nنەخێر = بەجێبهێڵیت`);
+                    const choice = await confirm(`⚠️ پسوولەی ژمارە "${invoiceNo}" پێشتر هەیە — نوێبکەیتەوە؟\n\nبەلێ = نوێبکەرەوە\nنەخێر = بەجێبهێڵیت`);
                     if (choice) {
                         const old = sales[existIdx];
                         sales[existIdx] = { ...old, customerName, total, discount, totalCost, profit, paymentMethod,
