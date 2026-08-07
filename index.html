@@ -8467,6 +8467,63 @@
             updateLastBackupTimeDisplay();
         }
 
+        // دوگمەی "پشکنین بۆ نوێکاری" زیادبکە لە بەشی ڕێکخستنەکان — تەنیا کاتێک کلیک
+        // دەکرێت پشکنین دەکات (window.updaterAPI لە preload.js دێت)، هیچ پشکنینی
+        // خۆکاری لە پاشەوەدا نییە.
+        function addUpdateCheckButton() {
+            const settingsSection = document.getElementById('settingsSection');
+            if (!settingsSection) return;
+            if (document.getElementById('updateCheckCard')) return; // پێشتر زیادکراوە
+
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.id = 'updateCheckCard';
+            card.innerHTML = `
+                <div class="card-header">🔄 نوێکردنەوەی بەرنامە</div>
+                <p style="color: var(--text3); font-size:12px; margin: 0 0 10px;">
+                    پشکنین بۆ نوێکاری تەنیا کاتێک دەکرێت کە تۆ خۆت ئەم دوگمەیە دەگریتەوە —
+                    هیچ پشکنینێکی خۆکاری لە پاشەوەدا نییە، بۆیە کۆمپیوتەرت بارگران ناکات.
+                </p>
+                <button class="btn btn-info" onclick="checkForAppUpdate()" id="checkUpdateBtn">
+                    🔄 پشکنین بۆ نوێکاری
+                </button>
+                <p id="updateStatusText" style="color: var(--text2); font-size:13px; margin-top:10px; text-align:center;"></p>
+            `;
+            settingsSection.appendChild(card);
+        }
+
+        async function checkForAppUpdate() {
+            const statusEl = document.getElementById('updateStatusText');
+            const btn = document.getElementById('checkUpdateBtn');
+            if (!window.updaterAPI) {
+                if (statusEl) statusEl.textContent = '⚠️ ئەم تایبەتمەندییە تەنیا لە وەشانی دامەزراوی exe کاردەکات';
+                return;
+            }
+            if (btn) btn.disabled = true;
+            if (statusEl) statusEl.textContent = '⏳ پشکنین بۆ نوێکاری...';
+            await window.updaterAPI.checkForUpdates();
+            setTimeout(() => { if (btn) btn.disabled = false; }, 3000);
+        }
+
+        if (window.updaterAPI) {
+            window.updaterAPI.onUpdateStatus((data) => {
+                const statusEl = document.getElementById('updateStatusText');
+                if (!statusEl) return;
+                const texts = {
+                    checking: '⏳ پشکنین بۆ نوێکاری...',
+                    available: `🆕 وەشانی نوێ هەیە (${data.version}) — خۆکارانە دادەبەزێت`,
+                    'not-available': '✅ نوێترین وەشانت هەیە',
+                    downloading: `⬇️ داگرتنی نوێکاری... ${data.percent || 0}%`,
+                    downloaded: '✅ نوێکاری دابەزێنرا، بەرنامەکە دادەخرێتەوە بۆ دامەزراندنی...',
+                    error: '❌ پشکنین سەرنەکەوت — ئینتەرنێت بپشکنە'
+                };
+                statusEl.textContent = texts[data.status] || '';
+                if (typeof showToast === 'function' && (data.status === 'available' || data.status === 'not-available' || data.status === 'error')) {
+                    showToast(texts[data.status], data.status === 'error' ? 'error' : 'success');
+                }
+            });
+        }
+
         // ==================== سکانەری بارکۆد و گەڕان ====================
         document.addEventListener('DOMContentLoaded', async function() {
             applyTheme(localStorage.getItem('theme') || 'dark');
@@ -8474,6 +8531,7 @@
             applyNumberDisplayStyle();
             applyNumberColors();
             addBackupButton();
+            addUpdateCheckButton();
             const barcodeInput = document.getElementById('barcodeInput');
             
             if (barcodeInput) {
