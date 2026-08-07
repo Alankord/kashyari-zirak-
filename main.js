@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, globalShortcut } = require('electron');
+const { app, BrowserWindow, Menu, dialog, globalShortcut, ipcMain } = require('electron');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 
@@ -35,7 +35,10 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
-  autoUpdater.checkForUpdatesAndNotify();
+  // تێبینی: هیچ پشکنینی خۆکاری نوێکاری لێرە نییە چیتر (پێشتر autoUpdater.checkForUpdatesAndNotify()
+  // بوو کە لە کردنەوەی بەرنامەدا خۆکارانە دەیکرد). ئێستا تەنیا کاتێک بەکارهێنەر خۆی دوگمەی
+  // "پشکنین بۆ نوێکاری" دەگرێتەوە (لە ڕێکخستنەکاندا) پشکنین دەکرێت — بۆ ئەوەی بارگرانی
+  // سەر کۆمپیوتەر/ئینتەرنێتی هێواش کەمبکرێتەوە.
 
   const zoomIn = () => {
     const zoom = mainWindow.webContents.getZoomFactor();
@@ -78,7 +81,44 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
+// ==================== پشکنینی نوێکاری بەدەستی (کلیک-کراو) ====================
+// ئێستا تەنیا کاتێک لاپەڕەکە (renderer) داوای پشکنین دەکات (دوگمەی "پشکنین بۆ نوێکاری")،
+// پشکنین دەکرێت — نەک خۆکارانە لە کردنەوەی بەرنامەدا.
+let _checkingUpdate = false;
+
+ipcMain.handle('check-for-updates', async () => {
+  if (_checkingUpdate) return { status: 'already-checking' };
+  _checkingUpdate = true;
+  try {
+    mainWindow.webContents.send('update-status', { status: 'checking' });
+    await autoUpdater.checkForUpdates();
+    return { status: 'ok' };
+  } catch (err) {
+    mainWindow.webContents.send('update-status', { status: 'error', message: err.message });
+    return { status: 'error', message: err.message };
+  } finally {
+    _checkingUpdate = false;
+  }
+});
+
+autoUpdater.on('update-available', (info) => {
+  mainWindow.webContents.send('update-status', { status: 'available', version: info.version });
+});
+
+autoUpdater.on('update-not-available', () => {
+  mainWindow.webContents.send('update-status', { status: 'not-available' });
+});
+
+autoUpdater.on('error', (err) => {
+  mainWindow.webContents.send('update-status', { status: 'error', message: err == null ? 'نەزانراو' : err.message });
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  mainWindow.webContents.send('update-status', { status: 'downloading', percent: Math.round(progress.percent) });
+});
+
 autoUpdater.on('update-downloaded', () => {
+  mainWindow.webContents.send('update-status', { status: 'downloaded' });
   dialog.showMessageBox({
     type: 'info',
     title: 'وەشانی نوێ',
