@@ -1704,6 +1704,142 @@
             transition: width 0.7s cubic-bezier(0.25,0.46,0.45,0.94);
         }
 
+        /* ===== DAILY SALES TREND CHART ===== */
+        .trend-chart-wrap {
+            display: flex;
+            align-items: flex-end;
+            gap: 4px;
+            height: 160px;
+            padding: 6px 4px 0 4px;
+            overflow-x: auto;
+        }
+
+        .trend-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            min-width: 26px;
+            flex: 1;
+            height: 100%;
+            position: relative;
+        }
+
+        .trend-bar {
+            width: 100%;
+            max-width: 22px;
+            border-radius: 5px 5px 0 0;
+            background: linear-gradient(180deg, var(--amber), var(--amber-dim));
+            min-height: 2px;
+            transition: height 0.5s cubic-bezier(0.25,0.46,0.45,0.94);
+        }
+
+        .trend-col.today .trend-bar {
+            background: linear-gradient(180deg, var(--blue), #1d4ed8);
+        }
+
+        .trend-value {
+            font-size: 9px;
+            color: var(--text2);
+            margin-bottom: 3px;
+            white-space: nowrap;
+        }
+
+        .trend-label {
+            font-size: 10px;
+            color: var(--text3);
+            margin-top: 5px;
+            white-space: nowrap;
+        }
+
+        /* ===== STOCK FORECAST LIST ===== */
+        .forecast-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .forecast-row:last-child { border-bottom: none; }
+
+        .forecast-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text);
+        }
+
+        .forecast-meta {
+            font-size: 11px;
+            color: var(--text3);
+        }
+
+        .forecast-days {
+            font-weight: 700;
+            font-size: 12px;
+            padding: 3px 9px;
+            border-radius: 20px;
+            white-space: nowrap;
+        }
+
+        .forecast-days.critical { background: var(--red-dim); color: var(--red); }
+        .forecast-days.warning  { background: var(--amber-glow); color: var(--amber); }
+        .forecast-days.ok       { background: var(--green-dim); color: var(--green); }
+
+        .forecast-filter-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 10px;
+        }
+        .forecast-filter-btn {
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text2);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all .15s ease;
+        }
+        .forecast-filter-btn:hover { border-color: var(--border2); color: var(--text); }
+        .forecast-filter-btn.active {
+            background: var(--amber);
+            border-color: var(--amber);
+            color: #1a1a1a;
+        }
+        .forecast-custom-range {
+            display: none;
+            gap: 6px;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .forecast-custom-range.show { display: flex; }
+        .forecast-custom-range input[type="date"] {
+            padding: 5px 8px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            font-size: 12px;
+        }
+        .forecast-count-label {
+            font-size: 11px;
+            color: var(--text3);
+            margin-bottom: 8px;
+        }
+        .forecast-list-scroll {
+            max-height: 420px;
+            overflow-y: auto;
+        }
+
         /* ===== LOGIN OVERLAY ===== */
         .login-overlay {
             position: fixed;
@@ -2500,8 +2636,48 @@
 
             <div class="pos-layout">
                 <div class="card">
+                    <div class="card-header">📈 ڕەوتی فرۆشتنی ڕۆژانە (ماوەی هەڵبژێردراو)</div>
+                    <div id="dailySalesTrendChart">
+                        <p style="text-align:center; color:#999;">داتا نییە بۆ ئەم ماوەیە</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header">🔮 پێشبینیی تەواوبوونی کاڵا (بەپێی خێرایی فرۆشتن)</div>
+                    <div class="forecast-filter-tabs">
+                        <button type="button" class="forecast-filter-btn active" data-mode="week" onclick="setStockForecastMode('week')">📅 ئەم هەفتەیە</button>
+                        <button type="button" class="forecast-filter-btn" data-mode="month" onclick="setStockForecastMode('month')">🗓 ئەم مانگە</button>
+                        <button type="button" class="forecast-filter-btn" data-mode="custom" onclick="setStockForecastMode('custom')">🎯 ماوەی دیاریکراو</button>
+                        <button type="button" class="forecast-filter-btn" data-mode="all" onclick="setStockForecastMode('all')">📦 هەموو کاڵاکان</button>
+                    </div>
+                    <div class="forecast-custom-range" id="stockForecastCustomRange">
+                        <input type="date" id="stockForecastFromDate" onchange="renderStockForecastFiltered()">
+                        <span style="font-size:12px; color:var(--text3);">بۆ</span>
+                        <input type="date" id="stockForecastToDate" onchange="renderStockForecastFiltered()">
+                    </div>
+                    <div style="margin:8px 0;">
+                        <select id="stockForecastCompanySelect" class="form-control" style="width:auto; min-width:180px;" onchange="renderStockForecastFiltered()">
+                            <option value="all">🏢 هەموو شریکەکان</option>
+                        </select>
+                    </div>
+                    <div class="forecast-count-label" id="stockForecastCountLabel"></div>
+                    <div class="forecast-list-scroll">
+                        <div id="stockForecastList"><p style="color:#999;">داتا نییە بۆ ئەم ماوەیە</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="pos-layout">
+                <div class="card">
                     <div class="card-header">🏆 باشترین کاڵا فرۆشراوەکان (بە بڕ)</div>
-                    <div id="topProductsChart">
+                    <div style="margin-bottom:10px;">
+                        <select id="topProductsLimitSelect" class="form-control" style="width:auto; min-width:140px;" onchange="renderTopProductsFiltered()">
+                            <option value="5">🔝 باشترین 5</option>
+                            <option value="10">🔝 باشترین 10</option>
+                            <option value="15">🔝 باشترین 15</option>
+                            <option value="all">📦 هەمووی</option>
+                        </select>
+                    </div>
+                    <div id="topProductsChart" class="forecast-list-scroll">
                         <p style="text-align:center; color:#999;">داتا نییە بۆ ئەم ماوەیە</p>
                     </div>
                 </div>
@@ -5772,6 +5948,14 @@
             if (datalist) {
                 datalist.innerHTML = companies.map(c => `<option value="${c}"></option>`).join('');
             }
+
+            const forecastSelect = document.getElementById('stockForecastCompanySelect');
+            if (forecastSelect) {
+                const currentF = forecastSelect.value || 'all';
+                forecastSelect.innerHTML = '<option value="all">🏢 هەموو شریکەکان</option>' +
+                    companies.map(c => `<option value="${c}">${c}</option>`).join('');
+                if (companies.includes(currentF) || currentF === 'all') forecastSelect.value = currentF;
+            }
         }
 
         async function loadProducts(searchTerm = '') {
@@ -7569,6 +7753,105 @@
         let cachedSalesForReports = [];
         let cachedProductsForReports = [];
         let lastReturnsBySale = {};
+
+        // ==================== پێشبینیی تەواوبوونی کۆگا (فلتەری هەفتە/مانگ/دیاریکراو) ====================
+        let stockForecastAll = [];      // لیستی تەواوی کاڵاکان (بێ سنوور) دوای هەژماردنی خێرایی فرۆشتن
+        let stockForecastMode = 'week'; // week | month | custom | all
+
+        function setStockForecastMode(mode) {
+            stockForecastMode = mode;
+            document.querySelectorAll('.forecast-filter-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.mode === mode);
+            });
+            const customRange = document.getElementById('stockForecastCustomRange');
+            if (customRange) customRange.classList.toggle('show', mode === 'custom');
+            if (mode === 'custom') {
+                const fromEl = document.getElementById('stockForecastFromDate');
+                const toEl = document.getElementById('stockForecastToDate');
+                if (fromEl && !fromEl.value) fromEl.value = new Date().toISOString().slice(0, 10);
+                if (toEl && !toEl.value) {
+                    const d = new Date(); d.setDate(d.getDate() + 30);
+                    toEl.value = d.toISOString().slice(0, 10);
+                }
+            }
+            renderStockForecastFiltered();
+        }
+
+        function renderStockForecastFiltered() {
+            const forecastEl = document.getElementById('stockForecastList');
+            const countLabel = document.getElementById('stockForecastCountLabel');
+            if (!forecastEl) return;
+
+            const dayMs = 24 * 60 * 60 * 1000;
+            const now = new Date();
+            let windowEnd = null; // null یاخود Date: کۆتایی ماوەی فلتەرکردن (بۆ مۆدی all پێویست نییە)
+
+            if (stockForecastMode === 'week') {
+                // کۆتایی ئەم هەفتەیە (شەممە، دوای یەکشەممە وەک دەستپێکی هەفتە)
+                const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+                windowEnd = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6, 23, 59, 59, 999);
+            } else if (stockForecastMode === 'month') {
+                // کۆتایی ئەم مانگە
+                windowEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            } else if (stockForecastMode === 'custom') {
+                const toVal = document.getElementById('stockForecastToDate')?.value;
+                windowEnd = toVal ? new Date(toVal + 'T23:59:59') : null;
+                const fromVal = document.getElementById('stockForecastFromDate')?.value;
+                var windowStart = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+            } else {
+                windowEnd = null; // all: بێ سنووری بەروار
+            }
+
+            let list = stockForecastAll.map(f => {
+                const runOutDate = f.outNow ? now : new Date(now.getTime() + f.daysLeft * dayMs);
+                return Object.assign({}, f, { runOutDate });
+            });
+
+            if (windowEnd) {
+                list = list.filter(f => f.outNow || f.runOutDate <= windowEnd);
+            }
+            if (stockForecastMode === 'custom' && typeof windowStart !== 'undefined' && windowStart) {
+                list = list.filter(f => f.outNow || f.runOutDate >= windowStart);
+            }
+
+            const companyFilterVal = document.getElementById('stockForecastCompanySelect')?.value || 'all';
+            if (companyFilterVal !== 'all') {
+                list = list.filter(f => (f.company || 'بێ شریک') === companyFilterVal);
+            }
+
+            if (countLabel) {
+                countLabel.textContent = list.length > 0
+                    ? `${list.length} کاڵا دۆزرایەوە${companyFilterVal !== 'all' ? ' — شریک: ' + companyFilterVal : ''}`
+                    : '';
+            }
+
+            if (list.length === 0) {
+                forecastEl.innerHTML = '<p style="color:#28a745;">✅ هیچ کاڵایەک لە مەترسیدا نییە بۆ تەواوبوون لەم ماوەیەدا</p>';
+                return;
+            }
+
+            forecastEl.innerHTML = list.map(f => {
+                let cls, text;
+                if (f.outNow) {
+                    cls = 'critical'; text = 'تەواوبووە';
+                } else if (f.daysLeft <= 3) {
+                    cls = 'critical'; text = `~${Math.round(f.daysLeft)} ڕۆژ`;
+                } else if (f.daysLeft <= 10) {
+                    cls = 'warning'; text = `~${Math.round(f.daysLeft)} ڕۆژ`;
+                } else {
+                    cls = 'ok'; text = `~${Math.round(f.daysLeft)} ڕۆژ`;
+                }
+                return `
+                    <div class="forecast-row">
+                        <div style="overflow:hidden;">
+                            <div class="forecast-name" title="${f.name}">${f.name}${f.company ? ` <span style="background:${getCompanyColor(f.company)}22; color:${getCompanyColor(f.company)}; border:1px solid ${getCompanyColor(f.company)}; border-radius:12px; padding:1px 8px; font-size:10px; font-weight:700;">🏢 ${f.company}</span>` : ''}</div>
+                            <div class="forecast-meta">کۆگا: ${f.qty} | ڕێژە: ~${f.avgDaily.toFixed(1)}/ڕۆژ${!f.outNow ? ' | بەروار: ' + f.runOutDate.toLocaleDateString('ckb') : ''}</div>
+                        </div>
+                        <span class="forecast-days ${cls}">${text}</span>
+                    </div>
+                `;
+            }).join('');
+        }
         const paymentMethodText = {
             'cash': '💵 نەقد',
             'card': '💳 کارت',
@@ -7831,6 +8114,7 @@
             const purchases = await getAllPurchasesIncludingArchive();
             const products = getProductsCache();
             cachedProductsForReports = products;
+            populateCompanyOptions(products);
             const customers = getCustomersCache();
             const returns = (JSON.parse(localStorage.getItem('returns') || '[]'));
             const debtPayments = getDebtPaymentsCache();
@@ -7931,26 +8215,83 @@
                     productTotals[item.name].revenue += item.price * item.quantity;
                 });
             });
-            const topProducts = Object.entries(productTotals)
-                .sort((a, b) => b[1].qty - a[1].qty)
-                .slice(0, 6);
+            const topProductsAll = Object.entries(productTotals)
+                .sort((a, b) => b[1].qty - a[1].qty);
 
-            const topProductsEl = document.getElementById('topProductsChart');
-            if (topProductsEl) {
-                if (topProducts.length === 0) {
-                    topProductsEl.innerHTML = '<p style="text-align:center; color:#999;">داتا نییە بۆ ئەم ماوەیە</p>';
+            renderTopProductsFiltered(topProductsAll);
+
+            // ----- ڕەوتی فرۆشتنی ڕۆژانە (ماوەی هەڵبژێردراو) -----
+            const dayMs = 24 * 60 * 60 * 1000;
+            const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            const trendEl = document.getElementById('dailySalesTrendChart');
+            if (trendEl) {
+                const rangeStartCapped = start.getTime() > 0 ? start : (periodSales.length ? new Date(periodSales[periodSales.length - 1].createdAt) : new Date());
+                const totalDays = Math.max(1, Math.ceil((end - rangeStartCapped) / dayMs));
+                const todayKey = dayKey(new Date());
+                let buckets = [];
+
+                if (totalDays <= 45) {
+                    const dailyTotals = {};
+                    periodSales.forEach(s => {
+                        const k = dayKey(new Date(s.createdAt));
+                        dailyTotals[k] = (dailyTotals[k] || 0) + (s.total || 0);
+                    });
+                    for (let i = 0; i < totalDays; i++) {
+                        const d = new Date(rangeStartCapped.getFullYear(), rangeStartCapped.getMonth(), rangeStartCapped.getDate() + i);
+                        const k = dayKey(d);
+                        buckets.push({
+                            label: d.toLocaleDateString('ckb', { day: 'numeric', month: 'numeric' }),
+                            amount: dailyTotals[k] || 0,
+                            isToday: k === todayKey
+                        });
+                    }
                 } else {
-                    const maxQty = Math.max(...topProducts.map(([, v]) => v.qty));
-                    topProductsEl.innerHTML = topProducts.map(([name, v]) => `
-                        <div class="bar-row">
-                            <div class="bar-label" title="${name}">${name}</div>
-                            <div class="bar-track">
-                                <div class="bar-fill" style="width:${Math.max(8, (v.qty / maxQty) * 100)}%">${v.qty} دانە</div>
-                            </div>
+                    // ماوەیەکی درێژە: کۆمەڵکردن بە هەفتە بۆ ئەوەی گرافەکە خوێندنەوەی ئاسانتر بێت
+                    const weekTotals = {};
+                    const weekLabels = {};
+                    periodSales.forEach(s => {
+                        const d = new Date(s.createdAt);
+                        const weekStart = new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+                        const k = dayKey(weekStart);
+                        weekTotals[k] = (weekTotals[k] || 0) + (s.total || 0);
+                        weekLabels[k] = weekStart.toLocaleDateString('ckb', { day: 'numeric', month: 'numeric' });
+                    });
+                    buckets = Object.keys(weekTotals).sort().map(k => ({
+                        label: weekLabels[k], amount: weekTotals[k], isToday: false
+                    }));
+                }
+
+                if (buckets.length === 0 || buckets.every(b => b.amount === 0)) {
+                    trendEl.innerHTML = '<p style="text-align:center; color:#999;">داتا نییە بۆ ئەم ماوەیە</p>';
+                } else {
+                    const maxAmt = Math.max(1, ...buckets.map(b => b.amount));
+                    trendEl.innerHTML = `<div class="trend-chart-wrap">` + buckets.map(b => `
+                        <div class="trend-col ${b.isToday ? 'today' : ''}" title="${b.label}: ${b.amount.toLocaleString()} د.ع">
+                            <div class="trend-value">${b.amount > 0 ? (b.amount >= 1000 ? Math.round(b.amount / 1000) + 'هەزار' : b.amount) : ''}</div>
+                            <div class="trend-bar" style="height:${Math.max(2, (b.amount / maxAmt) * 100)}%"></div>
+                            <div class="trend-label">${b.label}</div>
                         </div>
-                    `).join('');
+                    `).join('') + `</div>`;
                 }
             }
+
+            // ----- پێشبینیی تەواوبوونی کاڵا (بەپێی خێرایی فرۆشتن لەم ماوەیەدا) -----
+            // لێرەدا تەنیا داتاکان ئامادە دەکەین بۆ هەموو کاڵاکان (بەبێ سنووردارکردنی ڕۆژ یان ژمارە)؛
+            // فلتەرکردن و پیشاندان بە پێی مۆدی هەڵبژێردراو (هەفتە/مانگ/دیاریکراو/هەموو) لە
+            // renderStockForecastFiltered() ئەنجام دەدرێت.
+            const daysInPeriod = Math.max(1, (end - start) / dayMs);
+            stockForecastAll = products.map(p => {
+                const sold = (productTotals[p.name] && productTotals[p.name].qty) || 0;
+                const avgDaily = sold / daysInPeriod;
+                const company = (p.company || '').trim();
+                if (p.quantity <= 0) {
+                    return { name: p.name, company, qty: p.quantity, avgDaily, daysLeft: 0, outNow: true };
+                }
+                if (avgDaily <= 0) return null; // بێ فرۆشتن لەم ماوەیەدا، ناتوانرێت پێشبینی بکرێت
+                return { name: p.name, company, qty: p.quantity, avgDaily, daysLeft: p.quantity / avgDaily, outNow: false };
+            }).filter(f => f).sort((a, b) => a.daysLeft - b.daysLeft);
+
+            renderStockForecastFiltered();
 
             // ----- فرۆشتن بەپێی شێوازی پارەدان -----
             // بەشی نەدراوی فرۆشتنی قەرز لێرە ئەژمار ناکرێت وەک پارەی وەرگیراو؛ بەڵام ئەگەر بەشێکی
@@ -8033,6 +8374,30 @@
             }
 
             console.log('Reports loaded successfully');
+        }
+
+        let _lastTopProductsAll = [];
+        function renderTopProductsFiltered(list) {
+            if (list) { _lastTopProductsAll = list; } else { list = _lastTopProductsAll || []; }
+            const limitVal = document.getElementById('topProductsLimitSelect')?.value || '5';
+            const topProducts = limitVal === 'all' ? list : list.slice(0, parseInt(limitVal, 10));
+
+            const topProductsEl = document.getElementById('topProductsChart');
+            if (topProductsEl) {
+                if (topProducts.length === 0) {
+                    topProductsEl.innerHTML = '<p style="text-align:center; color:#999;">داتا نییە بۆ ئەم ماوەیە</p>';
+                } else {
+                    const maxQty = Math.max(...topProducts.map(([, v]) => v.qty));
+                    topProductsEl.innerHTML = topProducts.map(([name, v]) => `
+                        <div class="bar-row">
+                            <div class="bar-label" title="${name}">${name}</div>
+                            <div class="bar-track">
+                                <div class="bar-fill" style="width:${Math.max(8, (v.qty / maxQty) * 100)}%">${v.qty} دانە</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            }
         }
 
         function exportSalesCSV() {
