@@ -2197,6 +2197,11 @@
                     <h3 id="invTotalProfit">0</h3>
                     <p>دینار</p>
                 </div>
+                <div class="stat-card profit">
+                    <p>📊 ڕێژەی سوودی ئەگەری</p>
+                    <h3 id="invTotalProfitPercent">0٪</h3>
+                    <p>لە کۆی بەهای کڕین</p>
+                </div>
                 <div class="stat-card" style="background: var(--surface); border-color: var(--red);">
                     <p>⚠️ کاڵای کەم/تەواوبوو</p>
                     <h3 id="invLowCount">0</h3>
@@ -2227,6 +2232,8 @@
                         <option value="qty-asc">بڕ: کەمترین یەکەم</option>
                         <option value="qty-desc">بڕ: زۆرترین یەکەم</option>
                         <option value="value-desc">بەها: زۆرترین یەکەم</option>
+                        <option value="profit-percent-asc">ڕێژەی سوود٪: کەمترین یەکەم</option>
+                        <option value="profit-percent-desc">ڕێژەی سوود٪: زۆرترین یەکەم</option>
                         <option value="updated-desc">گۆڕانکاری: نوێترین یەکەم</option>
                         <option value="updated-asc">گۆڕانکاری: کۆنترین یەکەم</option>
                         <option value="created-desc">بەرواری زیادکردن: نوێترین یەکەم</option>
@@ -2338,6 +2345,7 @@
                                 <th>نرخی کڕین</th>
                                 <th>بڕ لە کۆگا</th>
                                 <th>سوود/دانە</th>
+                                <th>ڕێژەی سوود٪</th>
                                 <th>کۆی بەهای کۆگا</th>
                                 <th>📅 بەسەرچوون</th>
                                 <th>دۆخ</th>
@@ -2348,7 +2356,7 @@
                         </thead>
                         <tbody id="productsTableBody">
                             <tr>
-                                <td colspan="13" style="text-align: center; color: var(--text3);">کاڵاکان باردەکرێن...</td>
+                                <td colspan="14" style="text-align: center; color: var(--text3);">کاڵاکان باردەکرێن...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -2488,13 +2496,14 @@
                                 <th>نرخی کڕین (ڕەسید)</th>
                                 <th>نرخی فرۆشتن</th>
                                 <th>سوود/دانە</th>
+                                <th>ڕێژەی سوود٪</th>
                                 <th>📦 بڕ لە ڕەسید</th>
                                 <th>📅 بەرواری دواین ڕەسید</th>
                                 <th>کردارەکان</th>
                             </tr>
                         </thead>
                         <tbody id="cardsTableBody">
-                            <tr><td colspan="5" style="text-align: center; color: var(--text3);">کارتەکان باردەکرێن...</td></tr>
+                            <tr><td colspan="6" style="text-align: center; color: var(--text3);">کارتەکان باردەکرێن...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -2596,6 +2605,11 @@
                     <p>📈 سوودی ڕاستەقینە</p>
                     <h3 id="periodProfit">0</h3>
                     <p>دینار</p>
+                </div>
+                <div class="stat-card profit">
+                    <p>📊 ڕێژەی سوود٪ (ماوەی هەڵبژێردراو)</p>
+                    <h3 id="periodProfitPercent">0٪</h3>
+                    <p>لە کۆی تێچوون</p>
                 </div>
                 <div class="stat-card">
                     <p>📦 ژمارەی کاڵاکان</p>
@@ -5969,6 +5983,9 @@
             const totalCostValue = products.reduce((s, p) => s + ((p.cost || 0) * (p.quantity || 0)), 0);
             const totalSaleValue = products.reduce((s, p) => s + ((p.price || 0) * (p.quantity || 0)), 0);
             const totalProfitValue = totalSaleValue - totalCostValue;
+            const totalProfitPercent = totalCostValue > 0
+                ? (totalProfitValue / totalCostValue) * 100
+                : (totalProfitValue > 0 ? 100 : 0);
             const lowOrOutCount = products.filter(p => p.quantity <= p.alert).length;
 
             const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -5977,6 +5994,7 @@
             setText('invTotalCost', totalCostValue.toLocaleString());
             setText('invTotalValue', totalSaleValue.toLocaleString());
             setText('invTotalProfit', totalProfitValue.toLocaleString());
+            setText('invTotalProfitPercent', totalProfitPercent.toLocaleString(undefined, {maximumFractionDigits: 1}) + '٪');
             setText('invLowCount', lowOrOutCount);
 
             // ----- پڕکردنەوەی لیستی شریکەکان (فلتەر + datalist) -----
@@ -6026,9 +6044,16 @@
 
             // ----- ڕیزکردن -----
             const sortVal = document.getElementById('invSortSelect')?.value || 'name';
+            const getProfitPercent = p => {
+                const cost = p.cost || 0;
+                const profit = (p.price || 0) - cost;
+                return cost > 0 ? (profit / cost) * 100 : (profit > 0 ? 100 : 0);
+            };
             if (sortVal === 'qty-asc') filtered.sort((a, b) => a.quantity - b.quantity);
             else if (sortVal === 'qty-desc') filtered.sort((a, b) => b.quantity - a.quantity);
             else if (sortVal === 'value-desc') filtered.sort((a, b) => (b.price * b.quantity) - (a.price * a.quantity));
+            else if (sortVal === 'profit-percent-asc') filtered.sort((a, b) => getProfitPercent(a) - getProfitPercent(b));
+            else if (sortVal === 'profit-percent-desc') filtered.sort((a, b) => getProfitPercent(b) - getProfitPercent(a));
             else if (sortVal === 'updated-desc' || sortVal === 'updated-asc') {
                 const getTime = p => {
                     const t = new Date(p.updatedAt || p.createdAt || 0).getTime();
@@ -6046,7 +6071,7 @@
             else filtered.sort((a, b) => a.name.localeCompare(b.name, 'ckb'));
             
             if (filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="13" style="text-align: center; color: var(--text3);">هیچ کاڵایەک نەدۆزرایەوە</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="14" style="text-align: center; color: var(--text3);">هیچ کاڵایەک نەدۆزرایەوە</td></tr>';
                 renderProductsPagination(0);
                 return;
             }
@@ -6067,6 +6092,9 @@
 
             tbody.innerHTML = pageItems.map(p => {
                 const profitPerUnit = (p.price || 0) - (p.cost || 0);
+                const profitPercent = (p.cost || 0) > 0
+                    ? (profitPerUnit / p.cost) * 100
+                    : (profitPerUnit > 0 ? 100 : 0);
                 const itemValue = (p.price || 0) * (p.quantity || 0);
                 const today = new Date(); today.setHours(0,0,0,0);
                 const soon = new Date(today); soon.setDate(soon.getDate() + 30);
@@ -6101,6 +6129,7 @@
                         </span>
                     </td>
                     <td class="${profitPerUnit >= 0 ? 'profit-positive' : 'profit-negative'}">${profitPerUnit.toLocaleString()}</td>
+                    <td class="${profitPercent >= 0 ? 'profit-positive' : 'profit-negative'}">${profitPercent.toLocaleString(undefined, {maximumFractionDigits: 1})}٪</td>
                     <td>${itemValue.toLocaleString()}</td>
                     <td>${expiryHtml}</td>
                     <td>${statusBadge}</td>
@@ -7041,10 +7070,13 @@
             const tbody = document.getElementById('cardsTableBody');
             if (tbody) {
                 if (cards.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text3);">هیچ کارتێک زیاد نەکراوە</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text3);">هیچ کارتێک زیاد نەکراوە</td></tr>';
                 } else {
                     tbody.innerHTML = cards.map(c => {
                         const margin = c.sellPrice - c.costPrice;
+                        const marginPercent = (c.costPrice || 0) > 0
+                            ? (margin / c.costPrice) * 100
+                            : (margin > 0 ? 100 : 0);
                         const stock = c.stock || 0;
                         const lastRestocked = c.lastRestocked 
                             ? new Date(c.lastRestocked).toLocaleString('ckb', {year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'})
@@ -7055,6 +7087,7 @@
                             <td>${c.costPrice.toLocaleString()}</td>
                             <td>${c.sellPrice.toLocaleString()}</td>
                             <td class="${margin >= 0 ? 'profit-positive' : 'profit-negative'}">${margin.toLocaleString()}</td>
+                            <td class="${marginPercent >= 0 ? 'profit-positive' : 'profit-negative'}">${marginPercent.toLocaleString(undefined, {maximumFractionDigits: 1})}٪</td>
                             <td>
                                 <span class="badge badge-success">${stock.toLocaleString()} کارت</span>
                             </td>
@@ -8176,9 +8209,14 @@
             const grossProfit = periodSales.reduce((sum, s) => sum + (s.profit != null ? s.profit : (s.total - (s.totalCost || 0))), 0);
             const totalReturnAmount = periodReturns.reduce((sum, r) => sum + (r.refundAmount || 0), 0);
             const totalReturnProfit = periodReturns.reduce((sum, r) => sum + (r.refundProfit || 0), 0);
+            const totalReturnCost = periodReturns.reduce((sum, r) => sum + (r.refundCost != null ? r.refundCost : 0), 0);
             // کۆی فرۆشتن دوای گەڕاندنەوەکان (returns) کەم دەکرێتەوە
             const periodTotal = periodTotalBeforeReturns - totalReturnAmount;
             const netProfit = grossProfit - totalReturnProfit;
+            const netCost = periodCost - totalReturnCost;
+            const periodProfitPercent = netCost > 0
+                ? (netProfit / netCost) * 100
+                : (netProfit > 0 ? 100 : 0);
 
             // ----- کۆی قەرزی هەموو کڕیاران (باڵانسی ئێستا، بێ بەستنەوە بە ماوەی ڕاپۆرت) -----
             const totalDebtAmount = customers.reduce((sum, c) => sum + (c.balance > 0 ? c.balance : 0), 0);
@@ -8187,6 +8225,7 @@
             const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
             setText('todaySales', periodTotal.toLocaleString());
             setText('periodProfit', netProfit.toLocaleString());
+            setText('periodProfitPercent', periodProfitPercent.toLocaleString(undefined, {maximumFractionDigits: 1}) + '٪');
             setText('periodCost', periodCost.toLocaleString());
             setText('totalProducts', products.length);
             setText('totalCustomers', customers.length);
@@ -8210,9 +8249,10 @@
             const productTotals = {};
             periodSales.forEach(s => {
                 (s.items || []).forEach(item => {
-                    if (!productTotals[item.name]) productTotals[item.name] = { qty: 0, revenue: 0 };
+                    if (!productTotals[item.name]) productTotals[item.name] = { qty: 0, revenue: 0, cost: 0 };
                     productTotals[item.name].qty += item.quantity;
                     productTotals[item.name].revenue += item.price * item.quantity;
+                    productTotals[item.name].cost += (item.cost || 0) * item.quantity;
                 });
             });
             const topProductsAll = Object.entries(productTotals)
@@ -8388,14 +8428,23 @@
                     topProductsEl.innerHTML = '<p style="text-align:center; color:#999;">داتا نییە بۆ ئەم ماوەیە</p>';
                 } else {
                     const maxQty = Math.max(...topProducts.map(([, v]) => v.qty));
-                    topProductsEl.innerHTML = topProducts.map(([name, v]) => `
+                    topProductsEl.innerHTML = topProducts.map(([name, v]) => {
+                        const vProfit = v.revenue - (v.cost || 0);
+                        const vProfitPercent = (v.cost || 0) > 0
+                            ? (vProfit / v.cost) * 100
+                            : (vProfit > 0 ? 100 : 0);
+                        return `
                         <div class="bar-row">
                             <div class="bar-label" title="${name}">${name}</div>
                             <div class="bar-track">
                                 <div class="bar-fill" style="width:${Math.max(8, (v.qty / maxQty) * 100)}%">${v.qty} دانە</div>
                             </div>
+                            <div class="${vProfit >= 0 ? 'profit-positive' : 'profit-negative'}" style="font-size:12px; white-space:nowrap; margin-right:8px;" title="سوودی گشتی: ${vProfit.toLocaleString()} د.ع">
+                                ${vProfitPercent.toLocaleString(undefined, {maximumFractionDigits: 1})}٪
+                            </div>
                         </div>
-                    `).join('');
+                    `;
+                    }).join('');
                 }
             }
         }
