@@ -35,10 +35,9 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
-  // تێبینی: هیچ پشکنینی خۆکاری نوێکاری لێرە نییە چیتر (پێشتر autoUpdater.checkForUpdatesAndNotify()
-  // بوو کە لە کردنەوەی بەرنامەدا خۆکارانە دەیکرد). ئێستا تەنیا کاتێک بەکارهێنەر خۆی دوگمەی
-  // "پشکنین بۆ نوێکاری" دەگرێتەوە (لە ڕێکخستنەکاندا) پشکنین دەکرێت — بۆ ئەوەی بارگرانی
-  // سەر کۆمپیوتەر/ئینتەرنێتی هێواش کەمبکرێتەوە.
+
+  // زیادکردنی پشکنینی خۆکارانە لە کاتی کردنەوەی بەرنامەدا
+  autoUpdater.checkForUpdatesAndNotify();
 
   const zoomIn = () => {
     const zoom = mainWindow.webContents.getZoomFactor();
