@@ -3494,6 +3494,39 @@
             return _purchasesCache;
         }
 
+        // تۆماری بڕی زیادکراو/ڕاستکراوەتەوە لە ڕێگەی دوگمەی "+" (addStock) یان "🎯" (correctStock)،
+        // بۆ ئەوەی لە مۆدالی مێژووی کاڵادا لەگەڵ کڕینەکان پیشان بدرێن. کۆتایترین ٥٠٠ تۆمار هەڵدەگیرێت.
+        let _stockChangeLogCache = null;
+        function getStockChangeLogCache() {
+            if (_stockChangeLogCache === null) {
+                _stockChangeLogCache = JSON.parse(localStorage.getItem('stockChangeLog') || '[]');
+            }
+            return _stockChangeLogCache;
+        }
+        function pushStockChangeLog(entry) {
+            const log = getStockChangeLogCache();
+            if (!entry.id) entry.id = `${entry.productId}_${entry.date}_${Math.random().toString(36).slice(2, 8)}`;
+            log.unshift(entry);
+            _stockChangeLogCache = log;
+            return safeSetLocalStorage('stockChangeLog', JSON.stringify(log));
+        }
+
+        // هەموو تۆمارە مێژووی کۆگا (زیندوو + ئەرشیفکراو) دەگەڕێنێتەوە، بۆ کاتی بینینی مێژووی تەواوی کاڵایەک
+        async function getAllStockChangeLogIncludingArchive() {
+            const live = getStockChangeLogCache();
+            let archived = [];
+            try { archived = await getAllArchived('stockChangeLog'); } catch (e) { archived = []; }
+            const seen = new Set();
+            const merged = [];
+            for (const l of [...live, ...archived]) {
+                const key = l.id;
+                if (key && seen.has(key)) continue;
+                if (key) seen.add(key);
+                merged.push(l);
+            }
+            return merged;
+        }
+
         function getCustomersCache() {
             if (_customersCache === null) {
                 _customersCache = JSON.parse(localStorage.getItem('customers') || '[]');
@@ -3536,6 +3569,11 @@
             return safeSetLocalStorage('purchases', JSON.stringify(purchases));
         }
 
+        function saveStockChangeLogCache(log) {
+            _stockChangeLogCache = log;
+            return safeSetLocalStorage('stockChangeLog', JSON.stringify(log));
+        }
+
         function saveCustomersCache(customers) {
             _customersCache = customers;
             return safeSetLocalStorage('customers', JSON.stringify(customers));
@@ -3566,12 +3604,13 @@
             return new Promise((resolve, reject) => {
                 if (_archiveDB) return resolve(_archiveDB);
                 if (!window.indexedDB) return reject(new Error('IndexedDB not supported'));
-                const req = indexedDB.open('posArchiveDB', 3);
+                const req = indexedDB.open('posArchiveDB', 4);
                 req.onupgradeneeded = (e) => {
                     const dbx = e.target.result;
                     if (!dbx.objectStoreNames.contains('sales')) dbx.createObjectStore('sales', { keyPath: 'invoiceNo' });
                     if (!dbx.objectStoreNames.contains('cardSales')) dbx.createObjectStore('cardSales', { keyPath: 'id' });
                     if (!dbx.objectStoreNames.contains('purchases')) dbx.createObjectStore('purchases', { keyPath: 'invoiceNo' });
+                    if (!dbx.objectStoreNames.contains('stockChangeLog')) dbx.createObjectStore('stockChangeLog', { keyPath: 'id' });
                 };
                 req.onsuccess = (e) => { _archiveDB = e.target.result; resolve(_archiveDB); };
                 req.onerror = (e) => reject(e.target.error);
@@ -3810,6 +3849,23 @@
                     } // ئەگەر سەرنەکەوت، purchases وەک خۆی دەمێنێتەوە
                 }
             } catch (e) { console.error('trim purchases failed', e); }
+
+            // ٥. stockChangeLog: هەمان شێوازی purchases — هیچ تۆمارێکی زیادکردن/ڕاستکردنەوە
+            //    لەناوناچێت، تەنیا کۆنترینەکان ئەرشیف بۆ IndexedDB دەکرێن پێش لابردنیان لە بیرگەی خێرا.
+            try {
+                const stockLog = getStockChangeLogCache();
+                const LIMIT = level === 1 ? 500 : (level === 2 ? 300 : 100);
+                if (stockLog.length > LIMIT) {
+                    const sorted = [...stockLog].sort((a, b) => new Date(a.date || 0) - new Date(b.date || 0));
+                    const overflowCount = sorted.length - LIMIT;
+                    const toArchive = sorted.slice(0, overflowCount);
+                    const keep = sorted.slice(overflowCount);
+                    const archived = await archiveRecords('stockChangeLog', toArchive); // چاوەڕوانی دەکرێت
+                    if (archived) {
+                        saveStockChangeLogCache(keep);
+                    } // ئەگەر سەرنەکەوت، stockChangeLog وەک خۆی دەمێنێتەوە
+                }
+            } catch (e) { console.error('trim stockChangeLog failed', e); }
         }
 
         // پاکردنەوەی بیرگە بەدەستی — ئەگەر هەر کاتێک هەڵەی "کێشەیەک ڕوویدا" دووبارە دەرکەوت،
@@ -5368,7 +5424,7 @@
                         const add = item._pkgSize ? (item.quantity * item._pkgSize) : item.quantity;
                         product.quantity = (product.quantity || 0) + add;
                         product.lastChangeType = 'purchase';
-                        if (!product.createdAt) product.createdAt = new Date().toISOString();
+                        product.createdAt = new Date().toISOString();
                         changedProducts.push(product);
                     }
                 }
@@ -6121,8 +6177,8 @@
                     <td>${p.barcode}${(Array.isArray(p.extraBarcodes) && p.extraBarcodes.length) ? ` <span style="color:#F59E0B; font-size:11px;" title="${p.extraBarcodes.join(', ')}">(+${p.extraBarcodes.length})</span>` : ''}</td>
                     <td onclick="editProductNameOnly('${p.id}')" style="cursor:pointer;" title="کلیک بکە بۆ گۆڕینی ناو">${p.color ? `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.color};margin-left:5px;vertical-align:middle;"></span>` : ''}${p.quickAccess ? '⭐ ' : ''}${p.name}${p.packageSize >= 2 ? ` <span style="background:#8B5CF6;color:var(--text);border-radius:8px;padding:2px 6px;font-size:11px;">📦${p.packageSize}</span>` : ''}${isExpired ? ' <span style="color:#dc3545;font-weight:bold;font-size:11px;">⚠️ بەسەرچوو</span>' : ''}</td>
                     <td onclick="editProductCompanyOnly('${p.id}')" style="cursor:pointer;" title="کلیک بکە بۆ گۆڕینی شریک/کۆمپانیا">${p.company ? `<span style="background:${getCompanyColor(p.company)}22; color:${getCompanyColor(p.company)}; border:1px solid ${getCompanyColor(p.company)}; border-radius:12px; padding:3px 10px; font-size:11px; font-weight:700; white-space:nowrap;">🏢 ${p.company}</span>` : '<span style="color:var(--text3); font-size:12px;">---</span>'}</td>
-                    <td>${p.price.toLocaleString()}</td>
-                    <td>${p.cost.toLocaleString()}</td>
+                    <td onclick="editProductPriceOnly('${p.id}')" style="cursor:pointer;" title="کلیک بکە بۆ گۆڕینی نرخی فرۆشتن">${p.price.toLocaleString()}</td>
+                    <td onclick="editProductCostOnly('${p.id}')" style="cursor:pointer;" title="کلیک بکە بۆ گۆڕینی نرخی کڕین">${p.cost.toLocaleString()}</td>
                     <td>
                         <span class="badge ${p.quantity <= 0 ? 'badge-danger' : (p.quantity <= p.alert ? 'badge-warning' : 'badge-success')}">
                             ${p.quantity} ${p.unit || 'دانە'}
@@ -6131,7 +6187,7 @@
                     <td class="${profitPerUnit >= 0 ? 'profit-positive' : 'profit-negative'}">${profitPerUnit.toLocaleString()}</td>
                     <td class="${profitPercent >= 0 ? 'profit-positive' : 'profit-negative'}">${profitPercent.toLocaleString(undefined, {maximumFractionDigits: 1})}٪</td>
                     <td>${itemValue.toLocaleString()}</td>
-                    <td>${expiryHtml}</td>
+                    <td onclick="editProductExpiryOnly('${p.id}')" style="cursor:pointer;" title="کلیک بکە بۆ گۆڕینی بەرواری بەسەرچوون">${expiryHtml}</td>
                     <td>${statusBadge}</td>
                     <td>
                         <button class="btn ${p.quickAccess ? 'btn-warning' : ''}" style="width: auto; padding: 5px 10px; font-size: 12px; margin: 2px; ${p.quickAccess ? '' : 'background:var(--surface3); color:var(--text2);'}" 
@@ -6156,7 +6212,7 @@
                                 onclick="correctStock('${p.id}')" title="ڕاستکردنەوەی بڕ بە ژمارەی ڕاستەقینە (ئەگەر لە کۆگا ژمارتووتەوە و جیاوازە)">🎯</button>
                     </td>
                     <td style="font-size:12px; white-space:nowrap; color:var(--text2);">${p.createdAt ? new Date(p.createdAt).toLocaleDateString('ckb', {year:'numeric', month:'short', day:'numeric'}) : 'نەزانراو'}</td>
-                    <td style="font-size:12px; white-space:nowrap;">
+                    <td style="font-size:12px; white-space:nowrap; cursor:pointer;" onclick="showProductHistory('${p.id}')" title="کلیک بکە بۆ بینینی مێژووی گۆڕانکاری کۆگا">
                         ${p.lastChangeType === 'correction'
                             ? `<span style="background:#06B6D4; color:#fff; border-radius:8px; padding:3px 8px; font-weight:600;" title="${p.lastCorrectionNote || ''} — ${p.updatedAt || ''}">🎯 ڕاستکرایەوە · ${timeAgo(p.updatedAt)}</span>`
                             : `<span style="color:#888;" title="زیادکراوە: ${p.createdAt ? new Date(p.createdAt).toLocaleString('ckb') : 'نەزانراو'}${p.updatedAt ? ' | دواین گۆڕانکاری: ' + new Date(p.updatedAt).toLocaleString('ckb') : ''}">➕ ${p.createdAt ? timeAgo(p.createdAt) : timeAgo(p.updatedAt)}</span>`}
@@ -6423,6 +6479,63 @@
             showToast(`✅ ناو گۆڕدرا بۆ: ${product.name}`);
         }
 
+        // گۆڕینی خێرای تەنها بەرواری بەسەرچوونی کاڵا - کلیک لەسەر خانەی بەسەرچوون لە خشتەدا
+        // مۆدالێکی جەدوەلی بەروار (date picker) دەکاتەوە، بۆ ئەوەی بەروارەکە هەڵبژێردرێت نەک بنووسرێت
+        let _expiryEditProductId = null;
+        async function editProductExpiryOnly(id) {
+            const products = getProductsCache();
+            const product = products.find(p => String(p.id) === String(id));
+            if (!product) return;
+            _expiryEditProductId = id;
+
+            let modal = document.getElementById('expiryEditModalOverlay');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'expiryEditModalOverlay';
+                modal.className = 'csv-modal-overlay';
+                modal.innerHTML = `
+                    <div class="csv-modal" style="max-width:360px;">
+                        <h3 id="expiryEditTitle">📅 بەرواری بەسەرچوون</h3>
+                        <div style="margin:14px 0;">
+                            <input type="date" id="expiryEditInput" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:15px; box-sizing:border-box;">
+                        </div>
+                        <div class="csv-modal-footer" style="flex-wrap:wrap; gap:8px;">
+                            <button class="csv-btn-cancel" onclick="document.getElementById('expiryEditModalOverlay').classList.remove('active')">❌ داخستن</button>
+                            <button class="btn btn-danger" style="width:auto; margin:0;" onclick="clearProductExpiry()">🗑️ لابردنی بەروار</button>
+                            <button class="btn btn-success" style="width:auto; margin:0;" onclick="confirmExpiryEdit()">✅ پاشەکەوتکردن</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+            }
+
+            document.getElementById('expiryEditTitle').textContent = `📅 بەرواری بەسەرچوون: ${product.name}`;
+            document.getElementById('expiryEditInput').value = product.expiryDate || '';
+            modal.classList.add('active');
+        }
+
+        async function confirmExpiryEdit() {
+            if (!_expiryEditProductId) return;
+            const products = getProductsCache();
+            const product = products.find(p => String(p.id) === String(_expiryEditProductId));
+            const overlay = document.getElementById('expiryEditModalOverlay');
+            if (!product) { overlay?.classList.remove('active'); return; }
+
+            const value = document.getElementById('expiryEditInput').value || '';
+            product.expiryDate = value;
+            saveProduct(product);
+            overlay.classList.remove('active');
+            _expiryEditProductId = null;
+            await loadProducts(document.getElementById('productsSearchBox')?.value || '');
+            await displayProducts();
+            showToast(value ? `✅ بەرواری بەسەرچوون گۆڕدرا بۆ: ${value}` : `✅ بەرواری بەسەرچوون سڕدرایەوە`);
+        }
+
+        async function clearProductExpiry() {
+            const input = document.getElementById('expiryEditInput');
+            if (input) input.value = '';
+            await confirmExpiryEdit();
+        }
+
         // گۆڕینی خێرای تەنها شریک/کۆمپانیای کاڵا - کلیک لەسەر شریک لە خشتەدا، لیستی شریکە هەبووەکان پیشان دەدرێت
         let _companyEditProductId = null;
         let _companyEditAllCompanies = [];
@@ -6608,6 +6721,154 @@
             showToast(`✅ نرخی "${product.name}" گۆڕدرا`);
         }
 
+        // گۆڕینی خێرای تەنها نرخی فرۆشتن - کلیک لەسەر ستوونی نرخی فرۆشتن لە خشتەدا
+        async function editProductPriceOnly(id) {
+            const products = getProductsCache();
+            const product = products.find(p => String(p.id) === String(id));
+            if (!product) return;
+
+            const newPrice = await prompt(`💲 نرخی فرۆشتنی نوێ بۆ "${product.name}":`, product.price);
+            if (newPrice === null) return;
+
+            const parsedPrice = parseFloat(newPrice);
+            if (isNaN(parsedPrice) || parsedPrice < 0) {
+                showToast('⚠️ تکایە ژمارەیەکی دروست بنووسە', 'error');
+                return;
+            }
+
+            product.price = parsedPrice;
+            saveProduct(product);
+            await loadProducts(document.getElementById('productsSearchBox')?.value || '');
+            await displayProducts();
+            showToast(`✅ نرخی فرۆشتنی "${product.name}" گۆڕدرا بۆ ${parsedPrice.toLocaleString()}`);
+        }
+
+        // گۆڕینی خێرای تەنها نرخی کڕین - کلیک لەسەر ستوونی نرخی کڕین لە خشتەدا
+        async function editProductCostOnly(id) {
+            const products = getProductsCache();
+            const product = products.find(p => String(p.id) === String(id));
+            if (!product) return;
+
+            const newCost = await prompt(`🧾 نرخی کڕینی نوێ بۆ "${product.name}":`, product.cost);
+            if (newCost === null) return;
+
+            const parsedCost = parseFloat(newCost);
+            if (isNaN(parsedCost) || parsedCost < 0) {
+                showToast('⚠️ تکایە ژمارەیەکی دروست بنووسە', 'error');
+                return;
+            }
+
+            product.cost = parsedCost;
+            saveProduct(product);
+            await loadProducts(document.getElementById('productsSearchBox')?.value || '');
+            await displayProducts();
+            showToast(`✅ نرخی کڕینی "${product.name}" گۆڕدرا بۆ ${parsedCost.toLocaleString()}`);
+        }
+
+        // پیشاندانی مێژووی گۆڕانکاری کۆگای کاڵایەک (کڕین + زیادکردن + ڕاستکردنەوە) — کلیک لەسەر ستوونی زیادکراو/گۆڕانکاری
+        async function showProductHistory(id) {
+            const products = getProductsCache();
+            const product = products.find(p => String(p.id) === String(id));
+            if (!product) return;
+
+            let modal = document.getElementById('productHistoryModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'productHistoryModal';
+                modal.className = 'csv-modal-overlay active';
+                modal.innerHTML = `
+                    <div class="csv-modal" style="max-width:560px;">
+                        <h3 id="productHistoryTitle">📜 مێژووی گۆڕانکاری کۆگا</h3>
+                        <div id="productHistoryBody" style="max-height:60vh; overflow:auto; margin:10px 0; font-size:13px;"></div>
+                        <div class="csv-modal-footer">
+                            <button class="csv-btn-cancel" onclick="document.getElementById('productHistoryModal').classList.remove('active')">❌ داخستن</button>
+                        </div>
+                    </div>`;
+                document.body.appendChild(modal);
+            } else {
+                modal.classList.add('active');
+            }
+
+            document.getElementById('productHistoryTitle').textContent = `📜 مێژووی گۆڕانکاری کۆگا: ${product.name}`;
+            const body = document.getElementById('productHistoryBody');
+            body.textContent = '⏳ چاوەڕێبە...';
+
+            let purchases = [];
+            try { purchases = await getAllPurchasesIncludingArchive(); } catch (e) { purchases = getPurchasesCache(); }
+
+            const entries = [];
+            for (const pur of purchases) {
+                if (!Array.isArray(pur.items)) continue;
+                for (const item of pur.items) {
+                    const realId = item._realProductId || item.productId;
+                    if (String(realId) === String(id)) {
+                        entries.push({
+                            type: 'purchase',
+                            date: pur.createdAt,
+                            invoiceNo: pur.invoiceNo,
+                            qty: item._pkgSize ? (item.quantity * item._pkgSize) : item.quantity,
+                            cost: item.cost || 0
+                        });
+                    }
+                }
+            }
+
+            let stockLog = [];
+            try { stockLog = await getAllStockChangeLogIncludingArchive(); } catch (e) { stockLog = getStockChangeLogCache(); }
+            for (const log of stockLog) {
+                if (String(log.productId) === String(id)) {
+                    entries.push(log);
+                }
+            }
+
+            entries.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+            const expiryLine = product.expiryDate
+                ? `<div style="padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:10px; background:var(--surface2);">📅 بەرواری بەسەرچوونی ئێستا: <b>${new Date(product.expiryDate + 'T00:00:00').toLocaleDateString('ckb', {year:'numeric', month:'short', day:'numeric'})}</b></div>`
+                : '';
+
+            if (entries.length === 0) {
+                body.innerHTML = expiryLine + `<div style="text-align:center; color:var(--text2); padding:20px;">هیچ مێژووی گۆڕانکارییەک بۆ ئەم کاڵایە نییە</div>`;
+                return;
+            }
+
+            const HISTORY_DISPLAY_LIMIT = 5;
+            const totalCount = entries.length;
+            const shownEntries = entries.slice(0, HISTORY_DISPLAY_LIMIT);
+
+            const rowsHtml = shownEntries.map(e => {
+                const dateStr = e.date ? new Date(e.date).toLocaleString('ckb') : 'نەزانراو';
+                if (e.type === 'restock') {
+                    return `
+                        <div style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                            <span style="font-weight:700; color:#22C55E;">➕ زیادکردنی کۆگا</span>
+                            <span style="color:var(--text2); font-size:11px;"> — ${dateStr}</span>
+                            <div style="margin-top:2px;">+${e.qty} ${e.unit || ''} (لە ${e.oldQty} بۆ ${e.newQty} ${e.unit || ''})</div>
+                        </div>`;
+                }
+                if (e.type === 'correction') {
+                    return `
+                        <div style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                            <span style="font-weight:700; color:#06B6D4;">🎯 ڕاستکردنەوەی کۆگا</span>
+                            <span style="color:var(--text2); font-size:11px;"> — ${dateStr}</span>
+                            <div style="margin-top:2px;">${e.diff > 0 ? '+' : ''}${e.diff} ${e.unit || ''} (لە ${e.oldQty} بۆ ${e.newQty} ${e.unit || ''})</div>
+                        </div>`;
+                }
+                return `
+                    <div style="padding:6px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px;">
+                        <span style="font-weight:700; color:var(--amber);">🧾 ${e.invoiceNo}</span>
+                        <span style="color:var(--text2); font-size:11px;"> — ${dateStr}</span>
+                        <div style="margin-top:2px;">➕ ${e.qty} دانە${e.cost ? ` — نرخی کڕین: ${e.cost.toLocaleString()} د.ع/دانە` : ''}</div>
+                    </div>`;
+            }).join('');
+
+            const moreNote = totalCount > HISTORY_DISPLAY_LIMIT
+                ? `<div style="text-align:center; color:var(--text2); font-size:12px; padding:8px;">... و ${totalCount - HISTORY_DISPLAY_LIMIT} تۆماری کۆنتر (تەنیا نوێترین ${HISTORY_DISPLAY_LIMIT} پیشان دەدرێن)</div>`
+                : '';
+
+            body.innerHTML = expiryLine + rowsHtml + moreNote;
+        }
+
         // بەڕێوەبردنی چەند بارکۆد بۆ یەک کاڵا (بۆ نموونە: کاڵایەک کە لەلایەن دوو فابریکا/دابینکەرەوە بە دوو بارکۆدی جیاواز هاتووە)
         async function manageExtraBarcodes(id) {
             const products = getProductsCache();
@@ -6672,9 +6933,20 @@
             if (qty === null) return;
 
             const parsedQty = parseFloat(qty) || 0;
-            product.quantity = Math.round(((product.quantity || 0) + parsedQty) * 1000) / 1000;
+            const oldQty = product.quantity || 0;
+            product.quantity = Math.round((oldQty + parsedQty) * 1000) / 1000;
             product.lastChangeType = 'restock';
+            product.createdAt = new Date().toISOString();
             saveProduct(product);
+            pushStockChangeLog({
+                type: 'restock',
+                productId: product.id,
+                date: product.createdAt,
+                qty: parsedQty,
+                oldQty,
+                newQty: product.quantity,
+                unit: unitLabel
+            });
             await loadProducts();
             await displayProducts();
             await alert(`✅ بڕی ${parsedQty} ${unitLabel} زیادکرا! (کۆی نوێ: ${product.quantity} ${unitLabel})`);
@@ -6712,7 +6984,17 @@
             product.quantity = Math.round(newQty * 1000) / 1000;
             product.lastChangeType = 'correction';
             product.lastCorrectionNote = `${oldQty} ← ${newQty} ${unitLabel} (${diff > 0 ? '+' : ''}${diff})`;
+            product.createdAt = new Date().toISOString();
             saveProduct(product);
+            pushStockChangeLog({
+                type: 'correction',
+                productId: product.id,
+                date: product.createdAt,
+                diff,
+                oldQty,
+                newQty: product.quantity,
+                unit: unitLabel
+            });
             await loadProducts();
             await displayProducts();
             showToast(`🎯 بڕی "${product.name}" ڕاستکرایەوە: ${oldQty} ← ${newQty} ${unitLabel} (${diff > 0 ? '+' : ''}${diff})`);
