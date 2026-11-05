@@ -3530,6 +3530,8 @@
         function getCustomersCache() {
             if (_customersCache === null) {
                 _customersCache = JSON.parse(localStorage.getItem('customers') || '[]');
+                // چاککردن: balance ی null/NaN دەکرێتە 0 (پێشتر لیستی کڕیارانی تێکدەدا)
+                _customersCache.forEach(c => { if (typeof c.balance !== 'number' || !isFinite(c.balance)) c.balance = Number(c.balance) || 0; });
             }
             return _customersCache;
         }
@@ -4411,8 +4413,7 @@
             const customers = getCustomersCache();
             const index = customers.findIndex(c => c.id === customer.id);
             if (index >= 0) { customers[index] = customer; } else { customers.push(customer); }
-            saveCustomersCache(customers);
-            return true;
+            return saveCustomersCache(customers);
         }
 
         function deleteCustomerFromDB(id) {
@@ -7652,11 +7653,11 @@
             tbody.innerHTML = customers.map(c => `
                 <tr>
                     <td>${c.name}</td>
-                    <td>${c.phone}</td>
-                    <td>${c.email}</td>
+                    <td>${c.phone || ''}</td>
+                    <td>${c.email || ''}</td>
                     <td>
                         <span class="badge ${c.balance > 0 ? 'badge-danger' : 'badge-success'}">
-                            ${c.balance.toLocaleString()} د.ع
+                            ${(Number(c.balance) || 0).toLocaleString()} د.ع
                         </span>
                     </td>
                     <td>
@@ -7757,6 +7758,10 @@
             if (amount === null) return;
 
             const payment = parseFloat(amount);
+            if (!isFinite(payment) || payment <= 0) {
+                await alert('تکایە بڕێکی دروست بنووسە!');
+                return;
+            }
             if (payment > customer.balance) {
                 await alert('ناتوانیت زیاتر لە قەرزەکە وەربگریت!');
                 return;
